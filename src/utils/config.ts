@@ -3,9 +3,14 @@ import dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Manually parse .env to avoid dotenv's aggressive console logging breaking the MCP stdio stream
+import { fileURLToPath } from 'url';
+
+// Parse .env from the root filepath dynamically because Cursor's execution context is arbitrary
 try {
-    const envPath = path.join(process.cwd(), '.env');
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const envPath = path.resolve(__dirname, '../../.env');
+
     if (fs.existsSync(envPath)) {
         const parsed = dotenv.parse(fs.readFileSync(envPath, { encoding: 'utf8' }));
         for (const k in parsed) {
