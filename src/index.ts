@@ -8,6 +8,7 @@ import { getSafetyAlertsTool } from "./tools/safety_alerts.js";
 import { summarizeTool } from "./tools/summarize.js";
 import { replySuggestTool } from "./tools/reply.js";
 import { exportTool } from "./tools/export.js";
+import { topIssuesTool } from "./tools/top_issues.js";
 import { VoyVectorStore } from "./infrastructure/adapters/voy_vector_store.js";
 import { ConcurrentLLMClient } from "./engine/llmClient.js";
 
@@ -109,6 +110,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 }
             },
             {
+                name: "reviews_top_issues",
+                description: "Rank the top issue clusters by issue type and feature area.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: {
+                            type: "array",
+                            items: { type: "object" }
+                        },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews"]
+                }
+            },
+            {
                 name: "reviews_search",
                 description: "Semantically search through imported reviews using a natural language query with optional filtering and sorting.",
                 inputSchema: {
@@ -181,6 +197,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
         if (request.params.name === "reviews_export") {
             const data = await exportTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_top_issues") {
+            const data = await topIssuesTool(request.params.arguments);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
