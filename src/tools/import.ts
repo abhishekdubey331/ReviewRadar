@@ -135,8 +135,7 @@ export async function importReviews(input: unknown) {
                 cost_estimate_usd: (uniqueReviews.length * 55 / 1000000) * 0.02, // Estimate cost based on $0.02/1M tokens
                 execution_time_ms: 0
             },
-            reviews: uniqueReviews,
-            message: "Reviews processed and indexed successfully. The vector database is now populated."
+            message: `Successfully imported and indexed ${uniqueReviews.length} unique reviews from the dataset. The vector database is now populated and ready for searching.`
         }
     };
 }
