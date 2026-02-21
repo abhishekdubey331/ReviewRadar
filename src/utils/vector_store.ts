@@ -97,63 +97,60 @@ export class VectorStore {
             return 0;
         }
 
-        console.error(`🚀 Indexing ${newReviews.length} new reviews (Parallelized)...`);
+        console.error(`🚀 Indexing ${newReviews.length} new reviews (512-dim, Checkpointed)...`);
 
         try {
-            const chunkSize = 500;
-            const limit = pLimit(5); // Parallelize 5 chunks at a time
+            const chunkSize = 250;
+            const concurrencyLimit = pLimit(2); // Throttled concurrency for stability
+            const saveInterval = 1000; // Save index every 1k reviews
 
-            const tasks = [];
-            for (let i = 0; i < newReviews.length; i += chunkSize) {
-                const reviewChunk = newReviews.slice(i, i + chunkSize);
-                const texts = reviewChunk.map(r => r.content);
+            let processedInThisRun = 0;
 
-                tasks.push(limit(async () => {
-                    const response = await this.getOpenAI().embeddings.create({
-                        model: "text-embedding-3-small",
-                        input: texts,
-                    });
+            for (let i = 0; i < newReviews.length; i += saveInterval) {
+                const saveBatch = newReviews.slice(i, i + saveInterval);
+                const tasks = [];
 
-                    const embeddings = response.data.map(d => d.embedding);
+                for (let j = 0; j < saveBatch.length; j += chunkSize) {
+                    const reviewChunk = saveBatch.slice(j, j + chunkSize);
+                    const texts = reviewChunk.map(r => r.content);
 
-                    return reviewChunk.map((r, idx) => ({
-                        id: String(r.review_id),
-                        title: r.user_name || "Review",
-                        url: r.content,
-                        embeddings: embeddings[idx],
+                    tasks.push(concurrencyLimit(async () => {
+                        const response = await this.getOpenAI().embeddings.create({
+                            model: "text-embedding-3-small",
+                            input: texts,
+                            dimensions: 512, // DRATICALLY reduces memory usage (from 1536 to 512)
+                        });
+
+                        const embeddings = response.data.map(d => d.embedding);
+
+                        return reviewChunk.map((r, idx) => ({
+                            id: String(r.review_id),
+                            title: r.user_name || "Review",
+                            url: r.content,
+                            embeddings: embeddings[idx],
+                        }));
                     }));
-                }));
-            }
-
-            const results = await Promise.all(tasks);
-            const allEmbeddedResources: EmbeddedResource[] = results.flat();
-
-            if (!this.voy) {
-                throw new Error("Vector store not initialized properly.");
-            }
-
-            // Sub-chunk high-volume additions to prevent WASM "unreachable" memory traps
-            const wasmBatchSize = 1000;
-            console.error(`📦 Adding ${allEmbeddedResources.length} items to WASM memory in batches of ${wasmBatchSize}...`);
-
-            for (let i = 0; i < allEmbeddedResources.length; i += wasmBatchSize) {
-                const subChunk = allEmbeddedResources.slice(i, i + wasmBatchSize);
-                try {
-                    this.voy.add({ embeddings: subChunk });
-                    console.error(`✅ Added batch ${Math.floor(i / wasmBatchSize) + 1}/${Math.ceil(allEmbeddedResources.length / wasmBatchSize)}`);
-                } catch (wasmError: any) {
-                    console.error(`❌ WASM Trap during batch ${i}:`, wasmError);
-                    throw new Error(`Vector database reached a memory or internal limit: ${wasmError.message}`);
                 }
+
+                const batchResults = await Promise.all(tasks);
+                const flatBatch = batchResults.flat();
+
+                if (!this.voy) throw new Error("Vector store not initialized properly.");
+
+                // Add this batch to WASM
+                this.voy.add({ embeddings: flatBatch });
+
+                // Update tracking IDs
+                flatBatch.forEach(res => this.indexedIds.add(res.id));
+                processedInThisRun += flatBatch.length;
+
+                // CHECKPOINT: Save progress to disk
+                this.isInitialized = true;
+                await this.save();
+                console.error(`🏗️ Checkpoint: Saved ${this.indexedIds.size} total reviews to disk.`);
             }
 
-            // Update tracking
-            allEmbeddedResources.forEach(res => this.indexedIds.add(res.id));
-
-            this.isInitialized = true;
-            await this.save();
-
-            return allEmbeddedResources.length;
+            return processedInThisRun;
         } catch (error: any) {
             console.error("❌ Indexing Process Failed:", error);
             throw createError("INTERNAL", `Failed to index reviews: ${error.message}`);
@@ -163,7 +160,7 @@ export class VectorStore {
     async search(query: string, limit: number = 5) {
         await this.ensureInitialized();
 
-        if (!this.isInitialized) {
+        if (!this.isInitialized || !this.voy) {
             throw createError("INTERNAL", "Vector store not initialized. Please import reviews first.");
         }
 
@@ -171,13 +168,15 @@ export class VectorStore {
             const response = await this.getOpenAI().embeddings.create({
                 model: "text-embedding-3-small",
                 input: query,
+                dimensions: 512, // Must match indexing
             });
 
             const queryEmbedding = new Float32Array(response.data[0].embedding);
-            const results = this.voy!.search(queryEmbedding, limit);
+            const results = this.voy.search(queryEmbedding, limit);
 
             return results.neighbors;
         } catch (error: any) {
+            console.error("❌ Search Failed:", error);
             throw createError("INTERNAL", `Failed to search: ${error.message}`);
         }
     }
