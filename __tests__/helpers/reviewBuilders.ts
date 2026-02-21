@@ -28,6 +28,9 @@ export type AnalyzedReview = {
     };
     review_created_at?: string;
     score?: number;
+    app_version?: string;
+    os_version?: string;
+    device?: string;
     locale?: string;
     platform?: "play_store" | "app_store" | "unknown";
 };
@@ -65,6 +68,9 @@ export function makeAnalyzedReview(overrides: Partial<AnalyzedReview> = {}): Ana
         },
         review_created_at: overrides.review_created_at ?? "2026-02-01T10:00:00.000Z",
         score: overrides.score ?? 1,
+        app_version: overrides.app_version ?? "1.0.0",
+        os_version: overrides.os_version ?? "Android 14",
+        device: overrides.device ?? "Pixel 8",
         locale: overrides.locale ?? "en-US",
         platform: overrides.platform ?? "play_store"
     };
