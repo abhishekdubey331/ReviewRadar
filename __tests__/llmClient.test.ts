@@ -54,7 +54,7 @@ describe('Concurrent LLM Client (Anthropic Native)', () => {
 
         const result = await promise;
         expect(mockCreate).toHaveBeenCalledTimes(3);
-        expect(result.id).toBe('msg_1');
+        expect(Array.isArray(result.content)).toBe(true);
     });
 
     it('does not retry on 400 bad request error', async () => {

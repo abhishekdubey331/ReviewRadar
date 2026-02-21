@@ -10,8 +10,9 @@
     "start:all": "npm run scrape && npm run start",
     "build": "tsup",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "verify": "tsc --noEmit && vitest run"
+    "verify": "tsc --noEmit && vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
@@ -29,6 +30,7 @@
     "@types/async-retry": "^1.4.8",
     "@types/node": "^20.0.0",
     "@types/papaparse": "^5.3.14",
+    "@vitest/coverage-v8": "^1.6.1",
     "google-play-scraper": "^10.1.2",
     "tsup": "^8.0.0",
     "typescript": "^5.3.0",
