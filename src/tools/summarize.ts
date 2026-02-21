@@ -9,7 +9,7 @@ export interface SummarizeReviewInput {
 
 export async function summarizeReviews(
     reviews: SummarizeReviewInput[],
-    llmClient: ConcurrentLLMClient,
+    llmClient: ILLMClient,
     model: string = 'claude-3.5-sonnet-20240620'
 ): Promise<{
     top_themes: string[];
@@ -66,8 +66,9 @@ export async function summarizeReviews(
     };
 }
 
-export async function summarizeTool(input: { reviews: SummarizeReviewInput[] }) {
-    const llmClient = new ConcurrentLLMClient({ apiKey: process.env.ANTHROPIC_API_KEY || 'MOCK_KEY' });
+import { ILLMClient } from '../domain/ports/llm_client.js';
+
+export async function summarizeTool(input: { reviews: SummarizeReviewInput[] }, llmClient: ILLMClient) {
     const res = await summarizeReviews(input.reviews || [], llmClient);
     return { data: res };
 }

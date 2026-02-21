@@ -6,3 +6,7 @@ dist/
 .vscode/
 coverage/
 *.log
+sample_data/scraped_reviews.csv
+storage/
+out*.txt
+err*.txt

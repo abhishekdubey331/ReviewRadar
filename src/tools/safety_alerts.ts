@@ -4,15 +4,16 @@ import { importReviews } from './import.js';
 import { evaluateRules } from '../engine/rules.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
+import { IVectorStore } from '../domain/ports/vector_store.js';
 
-export async function getSafetyAlertsTool(input: unknown) {
+export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid analyze parameters", parseResult.error.format());
     }
 
     const { source, options } = parseResult.data;
-    const importRes = await importReviews({ source, options: { max_reviews: 5000 } });
+    const importRes = await importReviews({ source, options: { max_reviews: 5000 } }, vectorStore);
     const rawInputReviews = importRes.data.reviews;
 
     const startTime = Date.now();

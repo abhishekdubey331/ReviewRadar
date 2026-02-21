@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getSafetyAlertsTool } from '../src/tools/safety_alerts.js';
 
 describe('reviews.get_safety_alerts tool', () => {
@@ -26,7 +26,15 @@ describe('reviews.get_safety_alerts tool', () => {
             }
         };
 
-        const result = await getSafetyAlertsTool(input);
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const result = await getSafetyAlertsTool(input, mockVectorStore);
 
         expect(result.data).toBeDefined();
         expect(result.data.metadata).toBeDefined();

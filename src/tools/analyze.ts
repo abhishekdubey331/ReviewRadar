@@ -7,6 +7,7 @@ import { ConcurrentLLMClient } from '../engine/llmClient.js';
 import { CircuitBreaker } from '../engine/circuitBreaker.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
+import { IVectorStore } from '../domain/ports/vector_store.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -23,14 +24,14 @@ export const AnalyzeToolInputSchema = z.object({
 
 const cb = new CircuitBreaker();
 
-export async function analyzeReviewsTool(input: unknown) {
+export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid analyze parameters", parseResult.error.format());
     }
 
     const { source, options } = parseResult.data;
-    const importRes = await importReviews({ source, options: { max_reviews: 20000 } });
+    const importRes = await importReviews({ source, options: { max_reviews: 20000 } }, vectorStore);
     const rawInputReviews = importRes.data.reviews;
     const llmClient = new ConcurrentLLMClient({
         apiKey: process.env.ANTHROPIC_API_KEY || 'MOCK_KEY',

@@ -19,13 +19,20 @@ describe('reviews.reply_suggest', () => {
             review_text: "My app crashed!",
             tone: "empathetic_formal"
         };
-        const result = await replySuggestTool(input);
+        const mockClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: 'We apologize for the inconvenience.' }]
+            })
+        } as any;
+
+        const result = await replySuggestTool(input, mockClient);
 
         expect(result.data.needs_human_approval).toBe(true);
         expect(result.data.reply_text).toBe('We apologize for the inconvenience.');
     });
 
     it('validates schema', async () => {
-        await expect(replySuggestTool({})).rejects.toThrow();
+        const mockClient = {} as any;
+        await expect(replySuggestTool({}, mockClient)).rejects.toThrow();
     });
 });

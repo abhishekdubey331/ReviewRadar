@@ -7,14 +7,15 @@ export const ReplySuggestSchema = z.object({
     tone: z.string().default("empathetic_formal")
 });
 
-export async function replySuggestTool(input: unknown) {
+import { ILLMClient } from '../domain/ports/llm_client.js';
+
+export async function replySuggestTool(input: unknown, llmClient: ILLMClient) {
     const parseResult = ReplySuggestSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid reply_suggest parameters", parseResult.error.format());
     }
 
     const { review_text, tone } = parseResult.data;
-    const llmClient = new ConcurrentLLMClient({ apiKey: process.env.ANTHROPIC_API_KEY || 'MOCK_KEY', concurrency: 5 });
 
     const systemPrompt = `You are a customer support AI for Greenlight.
 Your tone should be: ${tone}.

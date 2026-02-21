@@ -5,16 +5,24 @@ import * as path from 'path';
 
 import { fileURLToPath } from 'url';
 
-// Parse .env from the root filepath dynamically because Cursor's execution context is arbitrary
+let loadedEnvPath: string | null = null;
+
+// Parse .env from resilient candidate paths because MCP hosts may start the server with arbitrary CWD.
 try {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const envPath = path.resolve(__dirname, '../.env');
+    const projectRootEnv = path.resolve(__dirname, '../../.env');
+    const envCandidates = [
+        projectRootEnv, // deterministic for both src/utils and dist/utils
+        path.resolve(process.cwd(), '.env'),
+        path.resolve(__dirname, '../.env') // legacy fallback
+    ];
 
-    if (fs.existsSync(envPath)) {
-        const parsed = dotenv.parse(fs.readFileSync(envPath, { encoding: 'utf8' }));
-        for (const k in parsed) {
-            if (!process.env.hasOwnProperty(k)) process.env[k] = parsed[k];
+    for (const envPath of envCandidates) {
+        if (fs.existsSync(envPath)) {
+            dotenv.config({ path: envPath, override: true, quiet: true } as any);
+            loadedEnvPath = envPath;
+            break;
         }
     }
 } catch (e) {
@@ -35,6 +43,25 @@ export type Config = z.infer<typeof configSchema>;
 
 export function parseConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return configSchema.parse(env);
+}
+
+export function getConfigDiagnostics() {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const envCandidates = [
+        path.resolve(__dirname, '../../.env'),
+        path.resolve(process.cwd(), '.env'),
+        path.resolve(__dirname, '../.env')
+    ];
+
+    return {
+        process_cwd: process.cwd(),
+        loaded_env_path: loadedEnvPath,
+        env_candidates: envCandidates.map((p) => ({ path: p, exists: fs.existsSync(p) })),
+        has_openai_key: Boolean(process.env.OPENAI_API_KEY),
+        has_anthropic_key: Boolean(process.env.ANTHROPIC_API_KEY),
+        openai_key_preview: process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}` : null
+    };
 }
 
 // Global cached config getter

@@ -31,7 +31,15 @@ describe('Analyze Tool', () => {
             options: { concurrency: 1 }
         };
 
-        const result: any = await analyzeReviewsTool(input);
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const result: any = await analyzeReviewsTool(input, mockVectorStore);
 
         // Expect 2 reviews to have been processed
         expect(result.data.metadata.total_processed).toBe(2);

@@ -1,5 +1,4 @@
-import "dotenv/config";
-import { getConfig } from "./utils/config.js";
+import { getConfig, getConfigDiagnostics } from "./utils/config.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -9,9 +8,15 @@ import { getSafetyAlertsTool } from "./tools/safety_alerts.js";
 import { summarizeTool } from "./tools/summarize.js";
 import { replySuggestTool } from "./tools/reply.js";
 import { exportTool } from "./tools/export.js";
+import { VoyVectorStore } from "./infrastructure/adapters/voy_vector_store.js";
+import { ConcurrentLLMClient } from "./engine/llmClient.js";
 
 // Validate environment on boot
 const envConfig = getConfig();
+
+// Composition Root - Global instances
+const vectorStore = new VoyVectorStore();
+const llmClient = new ConcurrentLLMClient({ apiKey: process.env.ANTHROPIC_API_KEY || 'MOCK_KEY', concurrency: 10 });
 
 const server = new Server(
     {
@@ -34,12 +39,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        options: {
-                            type: "object",
-                            properties: {
-                                clear_index: { type: "boolean", description: "Wipe the vector database before importing" }
-                            }
-                        }
+                        source: { type: "object", description: "Optional source override. If omitted, uses sample_data/scraped_reviews.csv." }
                     }
                 }
             },
@@ -120,14 +120,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         max_score: { type: "number", description: "Maximum star rating (1-5)" },
                         start_date: { type: "string", description: "ISO date string (e.g. '2024-01-01')" },
                         end_date: { type: "string", description: "ISO date string (e.g. '2024-12-31')" },
-                        sort_by: { type: "string", enum: ["relevance", "date"], default: "relevance", description: "Sort by semantic relevance or recency" }
+                        sort_by: { type: "string", enum: ["relevance", "date"], default: "relevance", description: "Sort by semantic relevance or recency" },
+                        sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc", description: "Chronological sort order: 'desc' for newest first, 'asc' for oldest first." }
                     },
-                    required: ["query"]
+                    required: []
                 }
             },
             {
                 name: "reviews_get_index_status",
                 description: "Get diagnostic information about the vector database, including metadata health and record counts.",
+                inputSchema: { type: "object", properties: {} }
+            },
+            {
+                name: "reviews_diagnose_runtime",
+                description: "Get runtime diagnostics for env loading and index storage paths (keys are masked).",
                 inputSchema: { type: "object", properties: {} }
             }
         ]
@@ -137,7 +143,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     try {
         if (request.params.name === "reviews_import") {
-            const result = await importReviews(request.params.arguments);
+            const result = await importReviews(request.params.arguments, vectorStore);
             // Internal tools need the data, but we strip it for the MCP response to avoid bloat
             const { reviews, ...sanitizedData } = result.data as any;
             return {
@@ -146,28 +152,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         }
 
         if (request.params.name === "reviews_analyze") {
-            const data = await analyzeReviewsTool(request.params.arguments);
+            const data = await analyzeReviewsTool(request.params.arguments, vectorStore);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
         }
 
         if (request.params.name === "reviews_get_safety_alerts") {
-            const data = await getSafetyAlertsTool(request.params.arguments);
+            const data = await getSafetyAlertsTool(request.params.arguments, vectorStore);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
         }
 
         if (request.params.name === "reviews_summarize") {
-            const data = await summarizeTool(request.params.arguments);
+            const data = await summarizeTool(request.params.arguments, llmClient);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
         }
 
         if (request.params.name === "reviews_reply_suggest") {
-            const data = await replySuggestTool(request.params.arguments);
+            const data = await replySuggestTool(request.params.arguments, llmClient);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
@@ -181,19 +187,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
         }
 
         if (request.params.name === "reviews_search") {
-            const { vectorStore } = await import("./utils/vector_store.js");
-            const { query, ...options } = request.params.arguments;
+            const { query = "", ...options } = request.params.arguments;
             const results = await vectorStore.search(query, options);
+
             return {
                 content: [{ type: "text", text: JSON.stringify({ results }) }]
             };
         }
 
         if (request.params.name === "reviews_get_index_status") {
-            const { vectorStore } = await import("./utils/vector_store.js");
             const status = await vectorStore.getIndexStatus();
             return {
                 content: [{ type: "text", text: JSON.stringify(status) }]
+            };
+        }
+
+        if (request.params.name === "reviews_diagnose_runtime") {
+            const data = {
+                node_version: process.version,
+                process_cwd: process.cwd(),
+                config: getConfigDiagnostics(),
+                storage: vectorStore.getStorageDiagnostics()
+            };
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
             };
         }
 

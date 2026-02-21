@@ -1,36 +1,25 @@
 import { SourceSchema, ReviewInputSchema } from '../schemas/shared.js';
+import { IVectorStore } from '../domain/ports/vector_store.js';
 import { createError } from '../utils/errors.js';
 import { z } from 'zod';
 import { readFileSync, existsSync, statSync } from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
-import { vectorStore } from '../utils/vector_store.js';
 import { fileURLToPath } from 'url';
-
-export const ImportOptionsSchema = z.object({
-    max_reviews: z.number().int().max(50000).default(50000).optional(),
-    enable_vector_search: z.boolean().default(true).optional(),
-    clear_index: z.boolean().default(false).optional(),
-});
 
 export const ImportToolInputSchema = z.object({
     source: SourceSchema.optional(),
-    options: ImportOptionsSchema.optional(),
 });
 
-export async function importReviews(input: unknown) {
+export async function importReviews(input: unknown, vectorStore: IVectorStore) {
     const parseResult = ImportToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid import parameters", parseResult.error.format());
     }
 
-    let { source, options } = parseResult.data;
+    let { source } = parseResult.data;
 
-    // Clear index if requested
-    if (options?.clear_index) {
-        await vectorStore.clear();
-        console.error("🧹 Vector index cleared before import.");
-    }
+    // Non-destructive import by default: keep existing index if indexing fails mid-run.
 
     // Default to the auto-scraped dataset if no source is explicitly provided
     if (!source || (source.type === 'file' && !source.path)) {
@@ -43,14 +32,14 @@ export async function importReviews(input: unknown) {
         throw createError("FILE_NOT_FOUND", `File not found at path: ${source.path}`);
     }
 
-    const maxReviews = options?.max_reviews ?? 50000;
+    const maxReviews = 50000;
     let rawReviews: any[] = [];
 
     if (source.type === "inline") {
         rawReviews = source.reviews;
     } else if (source.type === "file") {
         const stats = statSync(source.path);
-        if (stats.size > 100 * 1024 * 1024) { // Increase to 100 MB for 50k reviews
+        if (stats.size > 100 * 1024 * 1024) {
             throw createError("INPUT_TOO_LARGE", "File size exceeds 100 MB");
         }
 
@@ -91,7 +80,7 @@ export async function importReviews(input: unknown) {
 
             const reviewParse = ReviewInputSchema.safeParse(raw);
             if (!reviewParse.success) {
-                continue; // Skip invalid rows instead of failing entire import for large files
+                continue;
             }
             const review = reviewParse.data;
             if (!reviewsMap.has(review.review_id)) {
@@ -110,15 +99,14 @@ export async function importReviews(input: unknown) {
         throw createError("INPUT_TOO_LARGE", `Reviews count (${uniqueReviews.length}) exceeds the maximum allowed (${maxReviews})`);
     }
 
-    // Index if vector search is enabled
     let vector_indexing_status = "disabled";
-    if (options?.enable_vector_search !== false) {
-        try {
-            await vectorStore.indexReviews(uniqueReviews);
-            vector_indexing_status = "success";
-        } catch (e: any) {
-            vector_indexing_status = `failed: ${e.message}`;
-        }
+    let import_status: "success" | "partial_success" = "success";
+    try {
+        await vectorStore.indexReviews(uniqueReviews);
+        vector_indexing_status = "success";
+    } catch (e: any) {
+        vector_indexing_status = `failed: ${e.message}`;
+        import_status = "partial_success";
     }
 
     const total_reviews_input = rawReviews.length;
@@ -137,12 +125,15 @@ export async function importReviews(input: unknown) {
                 filtered_spam,
                 spam_ratio: total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0,
                 total_processed: uniqueReviews.length,
+                import_status,
                 vector_indexing_status,
-                cost_estimate_usd: (uniqueReviews.length * 55 / 1000000) * 0.02, // Estimate cost based on $0.02/1M tokens
+                cost_estimate_usd: (uniqueReviews.length * 55 / 1000000) * 0.02,
                 execution_time_ms: 0
             },
-            reviews: uniqueReviews, // KEPT for internal tool chain, index.ts will strip for MCP response
-            message: `Successfully imported and indexed ${uniqueReviews.length} unique reviews from the dataset. The vector database is now populated and ready for searching.`
+            reviews: uniqueReviews,
+            message: import_status === "success"
+                ? `Successfully imported and indexed ${uniqueReviews.length} unique reviews from the dataset. The vector database is now populated and ready for searching.`
+                : `Imported ${uniqueReviews.length} unique reviews, but vector indexing failed. Search will be unavailable until indexing succeeds.`
         }
     };
 }
