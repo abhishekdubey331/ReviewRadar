@@ -17,7 +17,7 @@ export class VectorStore {
     private voy: Voy | null = null;
     private openai: OpenAI | null = null;
     private isInitialized = false;
-    private indexedIds: Set<string> = new Set();
+    private indexedMetadata: Map<string, any> = new Map();
 
     constructor() {
         // OpenAI client is initialized lazily so dotenv has time to load
@@ -52,11 +52,14 @@ export class VectorStore {
         }
 
         // Load metadata
-        if (this.indexedIds.size === 0 && fs.existsSync(METADATA_FILE)) {
+        if (this.indexedMetadata.size === 0 && fs.existsSync(METADATA_FILE)) {
             try {
                 const meta = JSON.parse(fs.readFileSync(METADATA_FILE, "utf8"));
-                if (Array.isArray(meta.indexed_ids)) {
-                    this.indexedIds = new Set(meta.indexed_ids);
+                if (meta.reviews && typeof meta.reviews === "object") {
+                    this.indexedMetadata = new Map(Object.entries(meta.reviews));
+                } else if (Array.isArray(meta.indexed_ids)) {
+                    // Migration: Convert old ID-only format to Map
+                    this.indexedMetadata = new Map(meta.indexed_ids.map((id: string) => [id, { id }]));
                 }
             } catch (e) {
                 console.error("⚠️ Failed to load metadata:", e);
@@ -74,13 +77,13 @@ export class VectorStore {
             fs.writeFileSync(INDEX_FILE, serialized, "utf8");
 
             // Save metadata
-            const meta = {
-                indexed_ids: Array.from(this.indexedIds),
+            const metadataToSave = {
+                reviews: Object.fromEntries(this.indexedMetadata),
                 updated_at: new Date().toISOString()
             };
-            fs.writeFileSync(METADATA_FILE, JSON.stringify(meta, null, 2), "utf8");
+            fs.writeFileSync(METADATA_FILE, JSON.stringify(metadataToSave, null, 2), "utf8");
 
-            console.error(`💾 Vector index and metadata (${this.indexedIds.size} IDs) saved to disk.`);
+            console.error(`💾 Vector index and metadata (${this.indexedMetadata.size} reviews) saved to disk.`);
         } catch (e) {
             console.error("❌ Failed to save vector store state:", e);
         }
@@ -90,7 +93,7 @@ export class VectorStore {
         await this.ensureInitialized();
 
         // Incremental: Filter only new reviews
-        const newReviews = reviews.filter(r => !this.indexedIds.has(String(r.review_id)));
+        const newReviews = reviews.filter(r => !this.indexedMetadata.has(String(r.review_id)));
 
         if (newReviews.length === 0) {
             console.error("⏩ All reviews in this batch are already indexed. Skipping.");
@@ -128,6 +131,14 @@ export class VectorStore {
                             title: r.user_name || "Review",
                             url: r.content,
                             embeddings: embeddings[idx],
+                            // Custom metadata for filtering
+                            reviewMetadata: {
+                                id: String(r.review_id),
+                                author: r.user_name,
+                                content: r.content,
+                                score: r.score,
+                                date: r.date,
+                            }
                         }));
                     }));
                 }
@@ -137,17 +148,26 @@ export class VectorStore {
 
                 if (!this.voy) throw new Error("Vector store not initialized properly.");
 
-                // Add this batch to WASM
-                this.voy.add({ embeddings: flatBatch });
+                // Add to WASM (only standard EmbeddedResource properties)
+                this.voy.add({
+                    embeddings: flatBatch.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        url: item.url,
+                        embeddings: item.embeddings
+                    }))
+                });
 
-                // Update tracking IDs
-                flatBatch.forEach(res => this.indexedIds.add(res.id));
+                // Update metadata store
+                flatBatch.forEach(item => {
+                    this.indexedMetadata.set(item.id, item.reviewMetadata);
+                });
                 processedInThisRun += flatBatch.length;
 
                 // CHECKPOINT: Save progress to disk
                 this.isInitialized = true;
                 await this.save();
-                console.error(`🏗️ Checkpoint: Saved ${this.indexedIds.size} total reviews to disk.`);
+                console.error(`🏗️ Checkpoint: Saved ${this.indexedMetadata.size} total reviews to disk.`);
             }
 
             return processedInThisRun;
@@ -157,8 +177,16 @@ export class VectorStore {
         }
     }
 
-    async search(query: string, limit: number = 5) {
+    async search(query: string, options: {
+        limit?: number,
+        min_score?: number,
+        max_score?: number,
+        start_date?: string,
+        end_date?: string,
+        sort_by?: "relevance" | "date"
+    } = {}) {
         await this.ensureInitialized();
+        const { limit = 5, min_score, max_score, start_date, end_date, sort_by = "relevance" } = options;
 
         if (!this.isInitialized || !this.voy) {
             throw createError("INTERNAL", "Vector store not initialized. Please import reviews first.");
@@ -172,9 +200,36 @@ export class VectorStore {
             });
 
             const queryEmbedding = new Float32Array(response.data[0].embedding);
-            const results = this.voy.search(queryEmbedding, limit);
 
-            return results.neighbors;
+            // Get a larger candidate pool if we have filters
+            const hasFilters = min_score !== undefined || max_score !== undefined || start_date || end_date;
+            const candidateLimit = hasFilters ? 200 : limit * 2;
+            const results = this.voy.search(queryEmbedding, candidateLimit);
+
+            // Fetch and Filter
+            let filteredResults = results.neighbors.map((n, index) => {
+                const meta = this.indexedMetadata.get(n.id);
+                return {
+                    id: n.id,
+                    relevance_rank: index, // Preserve Voy's semantic ordering
+                    metadata: meta || { id: n.id, content: n.url, author: n.title }
+                };
+            });
+
+            if (min_score !== undefined) filteredResults = filteredResults.filter(r => r.metadata.score >= min_score);
+            if (max_score !== undefined) filteredResults = filteredResults.filter(r => r.metadata.score <= max_score);
+            if (start_date) filteredResults = filteredResults.filter(r => new Date(r.metadata.date) >= new Date(start_date));
+            if (end_date) filteredResults = filteredResults.filter(r => new Date(r.metadata.date) <= new Date(end_date));
+
+            // Sorting
+            if (sort_by === "date") {
+                filteredResults.sort((a, b) => new Date(b.metadata.date).getTime() - new Date(a.metadata.date).getTime());
+            } else {
+                // Default: preserve semantic relevance order from Voy
+                filteredResults.sort((a, b) => a.relevance_rank - b.relevance_rank);
+            }
+
+            return filteredResults.slice(0, limit);
         } catch (error: any) {
             console.error("❌ Search Failed:", error);
             throw createError("INTERNAL", `Failed to search: ${error.message}`);
@@ -191,7 +246,7 @@ export class VectorStore {
                 fs.unlinkSync(METADATA_FILE);
             }
         }
-        this.indexedIds.clear();
+        this.indexedMetadata.clear();
         this.isInitialized = false;
     }
 }

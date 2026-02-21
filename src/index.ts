@@ -105,12 +105,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: "reviews_search",
-                description: "Semantically search through imported reviews using a natural language query.",
+                description: "Semantically search through imported reviews using a natural language query with optional filtering and sorting.",
                 inputSchema: {
                     type: "object",
                     properties: {
                         query: { type: "string", description: "The search query (e.g. 'battery drain problems')" },
-                        limit: { type: "number", default: 5 }
+                        limit: { type: "number", default: 5 },
+                        min_score: { type: "number", description: "Minimum star rating (1-5)" },
+                        max_score: { type: "number", description: "Maximum star rating (1-5)" },
+                        start_date: { type: "string", description: "ISO date string (e.g. '2024-01-01')" },
+                        end_date: { type: "string", description: "ISO date string (e.g. '2024-12-31')" },
+                        sort_by: { type: "string", enum: ["relevance", "date"], default: "relevance", description: "Sort by semantic relevance or recency" }
                     },
                     required: ["query"]
                 }
@@ -165,8 +170,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
         if (request.params.name === "reviews_search") {
             const { vectorStore } = await import("./utils/vector_store.js");
-            const { query, limit } = request.params.arguments;
-            const results = await vectorStore.search(query, limit);
+            const results = await vectorStore.search(request.params.arguments.query, request.params.arguments);
             return {
                 content: [{ type: "text", text: JSON.stringify({ results }) }]
             };
