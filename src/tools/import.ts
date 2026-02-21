@@ -5,6 +5,7 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import path from 'path';
 import Papa from 'papaparse';
 import { vectorStore } from '../utils/vector_store.js';
+import { fileURLToPath } from 'url';
 
 export const ImportOptionsSchema = z.object({
     max_reviews: z.number().int().max(50000).default(50000).optional(),
@@ -26,7 +27,9 @@ export async function importReviews(input: unknown) {
 
     // Default to the auto-scraped dataset if no source is explicitly provided by the LLM
     if (!source || (source.type === 'file' && !source.path)) {
-        source = { type: 'file', path: path.join(process.cwd(), 'sample_data/scraped_reviews.csv') };
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        source = { type: 'file', path: path.resolve(__dirname, '../sample_data/scraped_reviews.csv') };
     }
 
     const maxReviews = options?.max_reviews ?? 50000;
