@@ -30,14 +30,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         tools: [
             {
                 name: "reviews_import",
-                description: "Import app reviews securely from files or inline data.",
+                description: "Import app reviews securely from the auto-scraped dataset.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        source: { type: "object" },
                         options: { type: "object" }
-                    },
-                    required: ["source"]
+                    }
                 }
             },
             {
