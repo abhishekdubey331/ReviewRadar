@@ -127,9 +127,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
     try {
         if (request.params.name === "reviews_import") {
-            const data = await importReviews(request.params.arguments);
+            const result = await importReviews(request.params.arguments);
+            // Internal tools need the data, but we strip it for the MCP response to avoid bloat
+            const { reviews, ...sanitizedData } = result.data as any;
             return {
-                content: [{ type: "text", text: JSON.stringify(data) }]
+                content: [{ type: "text", text: JSON.stringify({ data: sanitizedData }) }]
             };
         }
 

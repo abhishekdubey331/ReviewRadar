@@ -25,24 +25,23 @@ export async function importReviews(input: unknown) {
 
     let { source, options } = parseResult.data;
 
-    // Default to the auto-scraped dataset if no source is explicitly provided by the LLM
+    // Default to the auto-scraped dataset if no source is explicitly provided
     if (!source || (source.type === 'file' && !source.path)) {
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
         source = { type: 'file', path: path.resolve(__dirname, '../sample_data/scraped_reviews.csv') };
     }
 
-    const maxReviews = options?.max_reviews ?? 50000;
+    if (source.type === "file" && !existsSync(source.path)) {
+        throw createError("FILE_NOT_FOUND", `File not found at path: ${source.path}`);
+    }
 
+    const maxReviews = options?.max_reviews ?? 50000;
     let rawReviews: any[] = [];
 
     if (source.type === "inline") {
         rawReviews = source.reviews;
     } else if (source.type === "file") {
-        if (!existsSync(source.path)) {
-            throw createError("FILE_NOT_FOUND", `File not found at path: ${source.path}`);
-        }
-
         const stats = statSync(source.path);
         if (stats.size > 100 * 1024 * 1024) { // Increase to 100 MB for 50k reviews
             throw createError("INPUT_TOO_LARGE", "File size exceeds 100 MB");
@@ -135,8 +134,8 @@ export async function importReviews(input: unknown) {
                 cost_estimate_usd: (uniqueReviews.length * 55 / 1000000) * 0.02, // Estimate cost based on $0.02/1M tokens
                 execution_time_ms: 0
             },
+            reviews: uniqueReviews, // KEPT for internal tool chain, index.ts will strip for MCP response
             message: `Successfully imported and indexed ${uniqueReviews.length} unique reviews from the dataset. The vector database is now populated and ready for searching.`
         }
     };
 }
-

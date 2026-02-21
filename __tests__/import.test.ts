@@ -6,7 +6,7 @@ import os from 'os';
 
 describe('importReviews', () => {
     it('should throw INVALID_SCHEMA for invalid input', async () => {
-        await expect(importReviews({})).rejects.toMatchObject({ code: 'INVALID_SCHEMA' });
+        await expect(importReviews({ source: "invalid" })).rejects.toMatchObject({ code: 'INVALID_SCHEMA' });
     });
 
     it('should deduplicate inline reviews by review_id', async () => {
