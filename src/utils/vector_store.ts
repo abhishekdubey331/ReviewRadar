@@ -137,7 +137,7 @@ export class VectorStore {
                                 author: r.user_name,
                                 content: r.content,
                                 score: r.score,
-                                date: r.date,
+                                date: r.review_created_at, // Use correct field from CSV/Schema
                             }
                         }));
                     }));
@@ -206,24 +206,39 @@ export class VectorStore {
             const candidateLimit = hasFilters ? 200 : limit * 2;
             const results = this.voy.search(queryEmbedding, candidateLimit);
 
-            // Fetch and Filter
+            // Fetch, Format, and Filter
             let filteredResults = results.neighbors.map((n, index) => {
-                const meta = this.indexedMetadata.get(n.id);
+                const meta = this.indexedMetadata.get(n.id) || {};
                 return {
                     id: n.id,
                     relevance_rank: index, // Preserve Voy's semantic ordering
-                    metadata: meta || { id: n.id, content: n.url, author: n.title }
+                    author: meta.author || n.title,
+                    content: meta.content || n.url,
+                    score: meta.score,
+                    date: meta.date || meta.review_created_at // Fallback
                 };
             });
 
-            if (min_score !== undefined) filteredResults = filteredResults.filter(r => r.metadata.score >= min_score);
-            if (max_score !== undefined) filteredResults = filteredResults.filter(r => r.metadata.score <= max_score);
-            if (start_date) filteredResults = filteredResults.filter(r => new Date(r.metadata.date) >= new Date(start_date));
-            if (end_date) filteredResults = filteredResults.filter(r => new Date(r.metadata.date) <= new Date(end_date));
+            if (min_score !== undefined) {
+                filteredResults = filteredResults.filter(r => r.score !== undefined && r.score >= min_score);
+            }
+            if (max_score !== undefined) {
+                filteredResults = filteredResults.filter(r => r.score !== undefined && r.score <= max_score);
+            }
+            if (start_date) {
+                filteredResults = filteredResults.filter(r => r.date && new Date(r.date) >= new Date(start_date));
+            }
+            if (end_date) {
+                filteredResults = filteredResults.filter(r => r.date && new Date(r.date) <= new Date(end_date));
+            }
 
             // Sorting
             if (sort_by === "date") {
-                filteredResults.sort((a, b) => new Date(b.metadata.date).getTime() - new Date(a.metadata.date).getTime());
+                filteredResults.sort((a, b) => {
+                    const dateA = a.date ? new Date(a.date).getTime() : 0;
+                    const dateB = b.date ? new Date(b.date).getTime() : 0;
+                    return dateB - dateA;
+                });
             } else {
                 // Default: preserve semantic relevance order from Voy
                 filteredResults.sort((a, b) => a.relevance_rank - b.relevance_rank);

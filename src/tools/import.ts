@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 export const ImportOptionsSchema = z.object({
     max_reviews: z.number().int().max(50000).default(50000).optional(),
     enable_vector_search: z.boolean().default(true).optional(),
+    clear_index: z.boolean().default(false).optional(),
 });
 
 export const ImportToolInputSchema = z.object({
@@ -24,6 +25,12 @@ export async function importReviews(input: unknown) {
     }
 
     let { source, options } = parseResult.data;
+
+    // Clear index if requested
+    if (options?.clear_index) {
+        await vectorStore.clear();
+        console.error("🧹 Vector index cleared before import.");
+    }
 
     // Default to the auto-scraped dataset if no source is explicitly provided
     if (!source || (source.type === 'file' && !source.path)) {

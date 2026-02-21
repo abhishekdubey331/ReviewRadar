@@ -34,7 +34,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 inputSchema: {
                     type: "object",
                     properties: {
-                        options: { type: "object" }
+                        options: {
+                            type: "object",
+                            properties: {
+                                clear_index: { type: "boolean", description: "Wipe the vector database before importing" }
+                            }
+                        }
                     }
                 }
             },
@@ -172,7 +177,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
         if (request.params.name === "reviews_search") {
             const { vectorStore } = await import("./utils/vector_store.js");
-            const results = await vectorStore.search(request.params.arguments.query, request.params.arguments);
+            const { query, ...options } = request.params.arguments;
+            const results = await vectorStore.search(query, options);
             return {
                 content: [{ type: "text", text: JSON.stringify({ results }) }]
             };
