@@ -137,4 +137,18 @@ describe('VectorStore', () => {
         expect(count).toBe(1);
         expect(mockCreate).toHaveBeenCalledTimes(1);
     });
+
+    it('should return index status with metadata health', async () => {
+        (vectorStore as any).indexedMetadata = new Map([
+            ['1', { id: '1', score: 5, date: '2024-01-01' }],
+            ['2', { id: '2', score: 1 }] // Missing date
+        ]);
+        (vectorStore as any).isInitialized = true;
+
+        const status = await vectorStore.getIndexStatus();
+        expect(status.total_indexed).toBe(2);
+        expect(status.metadata_health.score_count).toBe(2);
+        expect(status.metadata_health.date_count).toBe(1);
+        expect(status.is_ready).toBe(true);
+    });
 });

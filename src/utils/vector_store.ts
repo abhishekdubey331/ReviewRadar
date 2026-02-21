@@ -264,6 +264,33 @@ export class VectorStore {
         this.indexedMetadata.clear();
         this.isInitialized = false;
     }
+
+    async getIndexStatus() {
+        await this.ensureInitialized();
+        const total = this.indexedMetadata.size;
+        let withScore = 0;
+        let withDate = 0;
+
+        this.indexedMetadata.forEach(meta => {
+            if (meta.score !== undefined) withScore++;
+            if (meta.date || meta.review_created_at) withDate++;
+        });
+
+        return {
+            total_indexed: total,
+            metadata_health: {
+                has_score: total > 0 ? (withScore / total) : 0,
+                has_date: total > 0 ? (withDate / total) : 0,
+                score_count: withScore,
+                date_count: withDate
+            },
+            is_ready: total > 0 && withScore > 0,
+            storage_paths: {
+                index: INDEX_FILE,
+                metadata: METADATA_FILE
+            }
+        };
+    }
 }
 
 export const vectorStore = new VectorStore();

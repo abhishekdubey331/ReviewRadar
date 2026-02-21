@@ -124,6 +124,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     },
                     required: ["query"]
                 }
+            },
+            {
+                name: "reviews_get_index_status",
+                description: "Get diagnostic information about the vector database, including metadata health and record counts.",
+                inputSchema: { type: "object", properties: {} }
             }
         ]
     };
@@ -181,6 +186,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
             const results = await vectorStore.search(query, options);
             return {
                 content: [{ type: "text", text: JSON.stringify({ results }) }]
+            };
+        }
+
+        if (request.params.name === "reviews_get_index_status") {
+            const { vectorStore } = await import("./utils/vector_store.js");
+            const status = await vectorStore.getIndexStatus();
+            return {
+                content: [{ type: "text", text: JSON.stringify(status) }]
             };
         }
 
