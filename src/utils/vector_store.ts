@@ -9,11 +9,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const STORAGE_DIR = path.join(__dirname, "../../storage");
 const INDEX_FILE = path.join(STORAGE_DIR, "vector_index.json");
+const METADATA_FILE = path.join(STORAGE_DIR, "metadata.json");
+
+import pLimit from "p-limit";
 
 export class VectorStore {
     private voy: Voy | null = null;
     private openai: OpenAI | null = null;
     private isInitialized = false;
+    private indexedIds: Set<string> = new Set();
 
     constructor() {
         // OpenAI client is initialized lazily so dotenv has time to load
@@ -46,6 +50,18 @@ export class VectorStore {
                 this.voy = new Voy();
             }
         }
+
+        // Load metadata
+        if (this.indexedIds.size === 0 && fs.existsSync(METADATA_FILE)) {
+            try {
+                const meta = JSON.parse(fs.readFileSync(METADATA_FILE, "utf8"));
+                if (Array.isArray(meta.indexed_ids)) {
+                    this.indexedIds = new Set(meta.indexed_ids);
+                }
+            } catch (e) {
+                console.error("⚠️ Failed to load metadata:", e);
+            }
+        }
     }
 
     private async save() {
@@ -56,46 +72,69 @@ export class VectorStore {
             }
             const serialized = this.voy.serialize();
             fs.writeFileSync(INDEX_FILE, serialized, "utf8");
-            console.error("💾 Persistent vector index saved to disk.");
+
+            // Save metadata
+            const meta = {
+                indexed_ids: Array.from(this.indexedIds),
+                updated_at: new Date().toISOString()
+            };
+            fs.writeFileSync(METADATA_FILE, JSON.stringify(meta, null, 2), "utf8");
+
+            console.error(`💾 Vector index and metadata (${this.indexedIds.size} IDs) saved to disk.`);
         } catch (e) {
-            console.error("❌ Failed to save vector index:", e);
+            console.error("❌ Failed to save vector store state:", e);
         }
     }
 
     async indexReviews(reviews: any[]) {
         await this.ensureInitialized();
 
-        const texts = reviews.map(r => r.content);
+        // Incremental: Filter only new reviews
+        const newReviews = reviews.filter(r => !this.indexedIds.has(String(r.review_id)));
+
+        if (newReviews.length === 0) {
+            console.error("⏩ All reviews in this batch are already indexed. Skipping.");
+            return 0;
+        }
+
+        console.error(`🚀 Indexing ${newReviews.length} new reviews (Parallelized)...`);
 
         try {
             const chunkSize = 500;
-            const allEmbeddedResources: EmbeddedResource[] = [];
+            const limit = pLimit(5); // Parallelize 5 chunks at a time
 
-            for (let i = 0; i < texts.length; i += chunkSize) {
-                const chunk = texts.slice(i, i + chunkSize);
-                const reviewChunk = reviews.slice(i, i + chunkSize);
+            const tasks = [];
+            for (let i = 0; i < newReviews.length; i += chunkSize) {
+                const reviewChunk = newReviews.slice(i, i + chunkSize);
+                const texts = reviewChunk.map(r => r.content);
 
-                const response = await this.getOpenAI().embeddings.create({
-                    model: "text-embedding-3-small",
-                    input: chunk,
-                });
+                tasks.push(limit(async () => {
+                    const response = await this.getOpenAI().embeddings.create({
+                        model: "text-embedding-3-small",
+                        input: texts,
+                    });
 
-                const embeddings = response.data.map(d => d.embedding);
+                    const embeddings = response.data.map(d => d.embedding);
 
-                const chunkResources: EmbeddedResource[] = reviewChunk.map((r, idx) => ({
-                    id: String(r.review_id),
-                    title: r.user_name || "Review",
-                    url: r.content,
-                    embeddings: embeddings[idx],
+                    return reviewChunk.map((r, idx) => ({
+                        id: String(r.review_id),
+                        title: r.user_name || "Review",
+                        url: r.content,
+                        embeddings: embeddings[idx],
+                    }));
                 }));
-                allEmbeddedResources.push(...chunkResources);
             }
+
+            const results = await Promise.all(tasks);
+            const allEmbeddedResources: EmbeddedResource[] = results.flat();
 
             const resource: Resource = { embeddings: allEmbeddedResources };
             this.voy!.add(resource);
-            this.isInitialized = true;
 
-            // Save to disk after indexing
+            // Update tracking
+            allEmbeddedResources.forEach(res => this.indexedIds.add(res.id));
+
+            this.isInitialized = true;
             await this.save();
 
             return allEmbeddedResources.length;
@@ -132,7 +171,11 @@ export class VectorStore {
             if (fs.existsSync(INDEX_FILE)) {
                 fs.unlinkSync(INDEX_FILE);
             }
+            if (fs.existsSync(METADATA_FILE)) {
+                fs.unlinkSync(METADATA_FILE);
+            }
         }
+        this.indexedIds.clear();
         this.isInitialized = false;
     }
 }
