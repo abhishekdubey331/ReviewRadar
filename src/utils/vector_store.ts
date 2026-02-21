@@ -128,8 +128,24 @@ export class VectorStore {
             const results = await Promise.all(tasks);
             const allEmbeddedResources: EmbeddedResource[] = results.flat();
 
-            const resource: Resource = { embeddings: allEmbeddedResources };
-            this.voy!.add(resource);
+            if (!this.voy) {
+                throw new Error("Vector store not initialized properly.");
+            }
+
+            // Sub-chunk high-volume additions to prevent WASM "unreachable" memory traps
+            const wasmBatchSize = 1000;
+            console.error(`📦 Adding ${allEmbeddedResources.length} items to WASM memory in batches of ${wasmBatchSize}...`);
+
+            for (let i = 0; i < allEmbeddedResources.length; i += wasmBatchSize) {
+                const subChunk = allEmbeddedResources.slice(i, i + wasmBatchSize);
+                try {
+                    this.voy.add({ embeddings: subChunk });
+                    console.error(`✅ Added batch ${Math.floor(i / wasmBatchSize) + 1}/${Math.ceil(allEmbeddedResources.length / wasmBatchSize)}`);
+                } catch (wasmError: any) {
+                    console.error(`❌ WASM Trap during batch ${i}:`, wasmError);
+                    throw new Error(`Vector database reached a memory or internal limit: ${wasmError.message}`);
+                }
+            }
 
             // Update tracking
             allEmbeddedResources.forEach(res => this.indexedIds.add(res.id));
@@ -139,6 +155,7 @@ export class VectorStore {
 
             return allEmbeddedResources.length;
         } catch (error: any) {
+            console.error("❌ Indexing Process Failed:", error);
             throw createError("INTERNAL", `Failed to index reviews: ${error.message}`);
         }
     }
