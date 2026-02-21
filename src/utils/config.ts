@@ -1,8 +1,20 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 
-// Load environment variables from .env file if present
-dotenv.config();
+// Manually parse .env to avoid dotenv's aggressive console logging breaking the MCP stdio stream
+try {
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+        const parsed = dotenv.parse(fs.readFileSync(envPath, { encoding: 'utf8' }));
+        for (const k in parsed) {
+            if (!process.env.hasOwnProperty(k)) process.env[k] = parsed[k];
+        }
+    }
+} catch (e) {
+    // silently continue
+}
 
 export const configSchema = z.object({
     APP_LINK: z.string().url("APP_LINK must be a valid URL"),
