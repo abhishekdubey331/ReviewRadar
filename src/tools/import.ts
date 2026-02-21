@@ -12,7 +12,7 @@ export const ImportOptionsSchema = z.object({
 });
 
 export const ImportToolInputSchema = z.object({
-    source: SourceSchema,
+    source: SourceSchema.optional(),
     options: ImportOptionsSchema.optional(),
 });
 
@@ -22,7 +22,13 @@ export async function importReviews(input: unknown) {
         throw createError("INVALID_SCHEMA", "Invalid import parameters", parseResult.error.format());
     }
 
-    const { source, options } = parseResult.data;
+    let { source, options } = parseResult.data;
+
+    // Default to the auto-scraped dataset if no source is explicitly provided by the LLM
+    if (!source || (source.type === 'file' && !source.path)) {
+        source = { type: 'file', path: path.join(process.cwd(), 'sample_data/scraped_reviews.csv') };
+    }
+
     const maxReviews = options?.max_reviews ?? 50000;
 
     let rawReviews: any[] = [];
