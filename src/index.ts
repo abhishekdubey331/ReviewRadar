@@ -10,6 +10,7 @@ import { replySuggestTool } from "./tools/reply.js";
 import { exportTool } from "./tools/export.js";
 import { topIssuesTool } from "./tools/top_issues.js";
 import { segmentBreakdownTool } from "./tools/segment_breakdown.js";
+import { timeTrendsTool } from "./tools/time_trends.js";
 import { VoyVectorStore } from "./infrastructure/adapters/voy_vector_store.js";
 import { ConcurrentLLMClient } from "./engine/llmClient.js";
 
@@ -141,6 +142,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 }
             },
             {
+                name: "reviews_time_trends",
+                description: "Create day/week trend buckets for issue volume, severity, sentiment, and top issue keys.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: {
+                            type: "array",
+                            items: { type: "object" }
+                        },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews"]
+                }
+            },
+            {
                 name: "reviews_search",
                 description: "Semantically search through imported reviews using a natural language query with optional filtering and sorting.",
                 inputSchema: {
@@ -227,6 +243,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
         if (request.params.name === "reviews_segment_breakdown") {
             const data = await segmentBreakdownTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_time_trends") {
+            const data = await timeTrendsTool(request.params.arguments);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
