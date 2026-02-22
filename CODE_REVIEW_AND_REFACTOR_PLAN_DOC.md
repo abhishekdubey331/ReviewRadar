@@ -21,7 +21,7 @@
 - Done: `fc8ea51` extracted vector search/filter/sort service from `VoyVectorStore` (`src/infrastructure/adapters/voy_search_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `c902999` strengthened quality gates (coverage thresholds, tool registry contract tests, release checklist) (`vitest.config.ts`, `__tests__/tool_registry_contract.test.ts`, `docs/release_checklist.md`, `CONTRIBUTING.md`).
 - Done: `12d21be` extracted indexing service and migrated `VoyVectorStore` logs to structured logger (`src/infrastructure/adapters/voy_indexing_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
-- Done: `(pending commit)` added markdown lint gate and wired lint into `verify` (`scripts/lint_markdown.js`, `package.json`).
+- Done: `82d2d1d` added markdown lint gate and wired lint into `verify` (`scripts/lint_markdown.js`, `package.json`).
 - Done: `12d21be` extracted indexing service and migrated vector-store logs to structured logger (`src/infrastructure/adapters/voy_indexing_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `3504052` tool registry schema tightening for `source`, `options`, and export payload shapes (`src/app/tool_registry.ts`).
 - Done: `VoyVectorStore` decomposition baseline (embedding/persistence/search/indexing services extracted; env coupling removed).
