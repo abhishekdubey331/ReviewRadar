@@ -32,7 +32,7 @@ Generate a reply draft to the following user review. Write only the reply text.`
         const resp = await llmClient.processPrompt(prompt, 'claude-3-haiku-20240307');
         reply_text = Array.isArray(resp.content) && resp.content[0].type === "text" ? resp.content[0].text : "Fallback response due to unexpected output.";
     } catch (e: any) {
-        throw createError("INTERNAL", "LLM failure during reply generation", e.message);
+        throw createError("INTERNAL", "LLM failure during reply generation", { message: e.message });
     }
 
     return {

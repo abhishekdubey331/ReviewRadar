@@ -4,7 +4,7 @@ import {
     SourceSchema,
     MetadataSchema,
 } from "../src/schemas/shared.js";
-import { createError } from "../src/utils/errors.js";
+import { AppError, createError } from "../src/utils/errors.js";
 
 describe("Shared Zod Schemas Validation", () => {
     describe("ReviewInputSchema", () => {
@@ -67,11 +67,10 @@ describe("Shared Zod Schemas Validation", () => {
     describe("Error Utility", () => {
         it("should create a correctly formatted error object", () => {
             const err = createError("INPUT_TOO_LARGE", "Too many items", { count: 5001 });
-            expect(err).toEqual({
-                code: "INPUT_TOO_LARGE",
-                message: "Too many items",
-                details: { count: 5001 }
-            });
+            expect(err).toBeInstanceOf(AppError);
+            expect(err.code).toBe("INPUT_TOO_LARGE");
+            expect(err.message).toBe("Too many items");
+            expect(err.details).toEqual({ count: 5001 });
         });
     });
 });
