@@ -9,6 +9,7 @@
     "start": "node --experimental-wasm-modules dist/index.js",
     "start:all": "npm run scrape && npm run start",
     "build": "tsup",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
