@@ -17,15 +17,17 @@ export class VoyVectorStore implements IVectorStore {
     private readonly storageDir: string;
     private readonly indexFile: string;
     private readonly metadataFile: string;
+    private readonly embeddingApiKey?: string;
 
-    constructor(options?: { storageDir?: string }) {
+    constructor(options?: { storageDir?: string; embeddingApiKey?: string }) {
         this.storageDir = options?.storageDir ?? path.resolve(process.cwd(), "storage");
         this.indexFile = path.join(this.storageDir, "vector_index.json");
         this.metadataFile = path.join(this.storageDir, "metadata.json");
+        this.embeddingApiKey = options?.embeddingApiKey;
     }
 
     private getOpenAI(): OpenAI {
-        const apiKey = process.env.OPENAI_API_KEY;
+        const apiKey = this.embeddingApiKey;
         if (!apiKey || apiKey === "dummy-key" || apiKey.includes("your-openai-api-key")) {
             throw createError("INTERNAL", "OPENAI_API_KEY not found or is invalid. Vector indexing requires a valid API key in the .env file.");
         }

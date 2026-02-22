@@ -29,8 +29,7 @@ describe('VoyVectorStore', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        process.env.OPENAI_API_KEY = 'test-key';
-        vectorStore = new VoyVectorStore();
+        vectorStore = new VoyVectorStore({ embeddingApiKey: 'test-key' });
 
         // Mock fs exists and readFileSync for initialization
         (fs.existsSync as any).mockReturnValue(false);
@@ -186,7 +185,7 @@ describe('VoyVectorStore', () => {
 
     it('should use configured storage directory for diagnostics', () => {
         const storageDir = path.resolve(process.cwd(), 'custom_storage');
-        const store = new VoyVectorStore({ storageDir });
+        const store = new VoyVectorStore({ storageDir, embeddingApiKey: 'test-key' });
         const diagnostics: any = store.getStorageDiagnostics();
 
         expect(diagnostics.storage_dir).toBe(storageDir);

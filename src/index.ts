@@ -14,7 +14,10 @@ function buildRuntimeDeps() {
     // Validate configuration once at the composition root before creating dependencies.
     const config = getConfig();
     return {
-        vectorStore: new VoyVectorStore({ storageDir: resolveStorageDir(config.STORAGE_DIR) }),
+        vectorStore: new VoyVectorStore({
+            storageDir: resolveStorageDir(config.STORAGE_DIR),
+            embeddingApiKey: config.OPENAI_API_KEY
+        }),
         llmClient: new ConcurrentLLMClient({ concurrency: 10 })
     };
 }
