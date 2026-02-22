@@ -92,7 +92,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "reviews_get_safety_alerts",
-    description: "Fast-path tool to get only P0 and P1 safety alerts.",
+    description: "Fast-path tool to get high-priority alerts (P0/P1).",
     inputSchema: {
       type: "object",
       properties: {

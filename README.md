@@ -14,6 +14,7 @@ ReviewRadar is a Model Context Protocol (MCP) server for ingesting, indexing, an
 - At least one LLM provider key:
   - `OPENAI_API_KEY`, or
   - `ANTHROPIC_API_KEY`
+- If both provider keys are set, `LLM_PROVIDER` must be set to `openai` or `anthropic`.
 - For embedding-backed tools (`reviews_import`, `reviews_search`), set `OPENAI_API_KEY`.
 
 ## Quickstart
@@ -67,7 +68,8 @@ node /absolute/path/to/ReviewRadar/dist/index.js
 - `reviews_diagnose_runtime`
 
 ## Provider Capability Notes
-- `reviews_import`, `reviews_search`: require `OPENAI_API_KEY` for embeddings.
+- `reviews_search` requires `OPENAI_API_KEY` for embeddings.
+- `reviews_import` can import reviews without embeddings, but `OPENAI_API_KEY` is required for successful vector indexing.
 
 ## Storage behavior
 `reviews_import` persists vector artifacts to:

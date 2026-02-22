@@ -41,9 +41,8 @@ export async function getSafetyAlertsTool(input: unknown, _vectorStore: IVectorS
 
         const out = rulesRes;
 
-        // P0 or P1 severity
+        // Generic fast-path: include high-priority alerts regardless of app-specific taxonomy.
         if (out.severity === "P0" || out.severity === "P1") {
-            // "related to safety": we can filter by issue_type === 'Safety Concern' or just severity since it's safety_alerts criteria
             safety_alerts.push({
                 review_id: review.review_id,
                 text: includeRawText ? review.content : redacted,
