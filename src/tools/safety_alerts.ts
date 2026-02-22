@@ -5,6 +5,7 @@ import { evaluateRules } from '../engine/rules.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
+import { logger } from '../utils/logger.js';
 
 export async function getSafetyAlertsTool(input: unknown, _vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
@@ -54,7 +55,11 @@ export async function getSafetyAlertsTool(input: unknown, _vectorStore: IVectorS
     const warnings: string[] = [];
     if (spam_ratio > 0.2) warnings.push("Suspiciously high spam ratio detected.");
 
-    console.error(`[OBSERVABILITY/INFO] Fast-path Processed batch. Total Input: ${total_reviews_input}. Spam: ${filtered_spam}. Alerts Generated: ${safety_alerts.length}`);
+    logger.info("safety_alerts.batch_processed", {
+        total_reviews_input,
+        filtered_spam,
+        alerts_generated: safety_alerts.length
+    });
 
     return {
         data: {

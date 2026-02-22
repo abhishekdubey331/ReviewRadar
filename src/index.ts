@@ -8,6 +8,7 @@ import { TOOL_DEFINITIONS } from "./app/tool_registry.js";
 import { dispatchToolCall } from "./app/tool_dispatcher.js";
 import { AppError } from "./utils/errors.js";
 import { resolveStorageDir } from "./utils/config.js";
+import { logger } from "./utils/logger.js";
 
 function buildRuntimeDeps() {
     // Validate configuration once at the composition root before creating dependencies.
@@ -54,10 +55,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("ReviewRadar MCP server running on stdio");
+    logger.info("server.started", { transport: "stdio", name: "ReviewRadar-MCP" });
 }
 
 main().catch((error) => {
-    console.error("Fatal error starting server:", error);
+    logger.error("server.start_failed", {
+        message: error instanceof Error ? error.message : String(error)
+    });
     process.exit(1);
 });

@@ -10,6 +10,7 @@ import { IVectorStore } from '../domain/ports/vector_store.js';
 import { ILLMClient } from '../domain/ports/llm_client.js';
 import pLimit from 'p-limit';
 import { AnalyzedReviewSchema } from '../schemas/shared.js';
+import { logger } from '../utils/logger.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -163,9 +164,19 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
 
     // Observability Logging
     if (rule_coverage_drop) {
-        console.warn(`[OBSERVABILITY/WARN] rule_coverage_drop threshold exceeded: llm_routed_ratio is ${(llm_routed_ratio * 100).toFixed(1)}%`);
+        logger.warn("analyze.rule_coverage_drop", {
+            llm_routed_ratio,
+            threshold: 0.4
+        });
     }
-    console.info(`[OBSERVABILITY/INFO] Processed batch. Total Input: ${total_reviews_input}. Spam: ${filtered_spam}. LLM Routed: ${llm_routed_count}. Hybrid: ${hybrid_count}. Rule Only: ${rule_only_count}. Rules Fallback: ${warnings.includes("LLM Fallback Triggered")}`);
+    logger.info("analyze.batch_processed", {
+        total_reviews_input,
+        filtered_spam,
+        llm_routed_count,
+        hybrid_count,
+        rule_only_count,
+        rules_fallback: warnings.includes("LLM Fallback Triggered")
+    });
 
     return {
         data: {
