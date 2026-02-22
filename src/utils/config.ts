@@ -60,7 +60,7 @@ export function getConfigDiagnostics() {
         env_candidates: envCandidates.map((p) => ({ path: p, exists: fs.existsSync(p) })),
         has_openai_key: Boolean(process.env.OPENAI_API_KEY),
         has_anthropic_key: Boolean(process.env.ANTHROPIC_API_KEY),
-        openai_key_preview: process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}` : null
+        configured_provider: process.env.OPENAI_API_KEY ? "openai" : (process.env.ANTHROPIC_API_KEY ? "anthropic" : "none")
     };
 }
 

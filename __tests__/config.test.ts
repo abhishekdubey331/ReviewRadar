@@ -11,7 +11,7 @@ export const configSchema = z.object({
     message: "Either OPENAI_API_KEY or ANTHROPIC_API_KEY must be provided"
 });
 
-import { isPlayStoreLink, isAppStoreLink, extractAppId } from '../src/utils/config.js';
+import { isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics } from '../src/utils/config.js';
 
 describe('Configuration Validation', () => {
 
@@ -69,5 +69,28 @@ describe('App ID Extraction', () => {
 
     it('throws error on unsupported URL', () => {
         expect(() => extractAppId('https://google.com')).toThrowError("Unsupported App Link format");
+    });
+});
+
+describe('Configuration diagnostics', () => {
+    const originalOpenAIKey = process.env.OPENAI_API_KEY;
+    const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+
+    afterEach(() => {
+        if (originalOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = originalOpenAIKey;
+
+        if (originalAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+        else process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+    });
+
+    it('does not expose API key previews in diagnostics', () => {
+        process.env.OPENAI_API_KEY = 'sk-test-exposed-secret';
+        delete process.env.ANTHROPIC_API_KEY;
+
+        const diagnostics = getConfigDiagnostics() as Record<string, unknown>;
+        expect(diagnostics.has_openai_key).toBe(true);
+        expect(diagnostics.configured_provider).toBe('openai');
+        expect(diagnostics).not.toHaveProperty('openai_key_preview');
     });
 });
