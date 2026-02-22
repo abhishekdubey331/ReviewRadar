@@ -16,6 +16,7 @@ import { getConfigDiagnostics } from "../utils/config.js";
 import { createError } from "../utils/errors.js";
 import { IVectorStore } from "../domain/ports/vector_store.js";
 import { ILLMClient } from "../domain/ports/llm_client.js";
+import { z } from "zod";
 
 export interface DispatcherDeps {
     vectorStore: IVectorStore;
@@ -29,6 +30,49 @@ function asTextResponse(data: unknown) {
 function asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
+
+const SearchToolArgsSchema = z.object({
+    query: z.string().max(1000).default(""),
+    limit: z.number().int().min(1).max(100).default(5),
+    min_score: z.number().min(1).max(5).optional(),
+    max_score: z.number().min(1).max(5).optional(),
+    start_date: z.string().min(1).optional(),
+    end_date: z.string().min(1).optional(),
+    sort_by: z.enum(["relevance", "date"]).default("relevance"),
+    sort_direction: z.enum(["asc", "desc"]).default("desc")
+}).refine((value) => {
+    if (value.min_score !== undefined && value.max_score !== undefined) {
+        return value.min_score <= value.max_score;
+    }
+    return true;
+}, {
+    message: "min_score must be less than or equal to max_score",
+    path: ["min_score"]
+}).refine((value) => {
+    if (value.start_date) {
+        return Number.isFinite(Date.parse(value.start_date));
+    }
+    return true;
+}, {
+    message: "start_date must be a valid date string",
+    path: ["start_date"]
+}).refine((value) => {
+    if (value.end_date) {
+        return Number.isFinite(Date.parse(value.end_date));
+    }
+    return true;
+}, {
+    message: "end_date must be a valid date string",
+    path: ["end_date"]
+}).refine((value) => {
+    if (value.start_date && value.end_date) {
+        return new Date(value.start_date).getTime() <= new Date(value.end_date).getTime();
+    }
+    return true;
+}, {
+    message: "start_date must be earlier than or equal to end_date",
+    path: ["start_date"]
+});
 
 export async function dispatchToolCall(name: string, args: unknown, deps: DispatcherDeps) {
     const { vectorStore, llmClient } = deps;
@@ -68,8 +112,13 @@ export async function dispatchToolCall(name: string, args: unknown, deps: Dispat
             return asTextResponse(await weeklyReportTool(toolArgs));
         case "reviews_search": {
             const parsedArgs = asRecord(args);
-            const { query = "", ...options } = parsedArgs;
-            const results = await vectorStore.search(String(query), options);
+            const searchParse = SearchToolArgsSchema.safeParse(parsedArgs);
+            if (!searchParse.success) {
+                throw createError("INVALID_SCHEMA", "Invalid search parameters", searchParse.error.format());
+            }
+
+            const { query, ...options } = searchParse.data;
+            const results = await vectorStore.search(query, options);
             return asTextResponse({ results });
         }
         case "reviews_get_index_status":

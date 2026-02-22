@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { summarizeReviews } from './summarize.js';
+import { summarizeReviews, summarizeTool } from './summarize.js';
 import { ConcurrentLLMClient } from '../engine/llmClient.js';
 
 vi.mock('../engine/llmClient.js', () => {
@@ -32,5 +32,20 @@ describe('reviews.summarize', () => {
         expect(result.p2_count).toBe(1);
         expect(result.fyi_count).toBe(1);
         expect(result.top_themes).toEqual(["Theme 1", "Theme 2", "Theme 3"]);
+    });
+
+    it('rejects oversized summarize payloads', async () => {
+        const mockClient = new ConcurrentLLMClient({ apiKey: 'mock' });
+        const oversized = Array.from({ length: 5001 }, (_, idx) => ({
+            text: `Review ${idx}`,
+            feature_area: "Login",
+            issue_type: "Bug",
+            severity: "P1"
+        }));
+
+        await expect(summarizeTool({ reviews: oversized }, mockClient as any)).rejects.toMatchObject({
+            code: "INVALID_SCHEMA",
+            message: "Invalid summarize parameters"
+        });
     });
 });

@@ -14,7 +14,7 @@ describe("tool dispatcher", () => {
 
         const response: any = await dispatchToolCall("reviews_search", { query: "battery", limit: 1 }, { vectorStore, llmClient });
 
-        expect(vectorStore.search).toHaveBeenCalledWith("battery", { limit: 1 });
+        expect(vectorStore.search).toHaveBeenCalledWith("battery", { limit: 1, sort_by: "relevance", sort_direction: "desc" });
         expect(response.content[0].type).toBe("text");
         expect(response.content[0].text).toContain("results");
     });
@@ -33,6 +33,22 @@ describe("tool dispatcher", () => {
             code: "INVALID_SCHEMA",
             message: "Tool not found",
             details: { tool_name: "reviews_unknown" }
+        });
+    });
+
+    it("rejects invalid reviews_search args", async () => {
+        const vectorStore = {
+            search: vi.fn(),
+            indexReviews: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+        const llmClient = { processPrompt: vi.fn() } as any;
+
+        await expect(dispatchToolCall("reviews_search", { query: "battery", limit: 1000 }, { vectorStore, llmClient })).rejects.toMatchObject({
+            code: "INVALID_SCHEMA",
+            message: "Invalid search parameters"
         });
     });
 });

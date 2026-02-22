@@ -1,4 +1,6 @@
-import { ConcurrentLLMClient } from '../engine/llmClient.js';
+import { z } from 'zod';
+import { createError } from '../utils/errors.js';
+import { ILLMClient } from '../domain/ports/llm_client.js';
 
 export interface SummarizeReviewInput {
     text: string;
@@ -6,6 +8,17 @@ export interface SummarizeReviewInput {
     issue_type: string;
     severity: string;
 }
+
+const SummarizeReviewSchema = z.object({
+    text: z.string().max(10000),
+    feature_area: z.string().min(1).max(100),
+    issue_type: z.string().min(1).max(100),
+    severity: z.string().min(1).max(20),
+});
+
+const SummarizeToolInputSchema = z.object({
+    reviews: z.array(SummarizeReviewSchema).max(5000)
+});
 
 export async function summarizeReviews(
     reviews: SummarizeReviewInput[],
@@ -66,9 +79,12 @@ export async function summarizeReviews(
     };
 }
 
-import { ILLMClient } from '../domain/ports/llm_client.js';
+export async function summarizeTool(input: unknown, llmClient: ILLMClient) {
+    const parseResult = SummarizeToolInputSchema.safeParse(input);
+    if (!parseResult.success) {
+        throw createError("INVALID_SCHEMA", "Invalid summarize parameters", parseResult.error.format());
+    }
 
-export async function summarizeTool(input: { reviews: SummarizeReviewInput[] }, llmClient: ILLMClient) {
-    const res = await summarizeReviews(input.reviews || [], llmClient);
+    const res = await summarizeReviews(parseResult.data.reviews, llmClient);
     return { data: res };
 }
