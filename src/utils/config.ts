@@ -6,27 +6,39 @@ import { fileURLToPath } from 'url';
 import { createError } from './errors.js';
 
 let loadedEnvPath: string | null = null;
+let envLoaded = false;
 
-// Parse .env from resilient candidate paths because MCP hosts may start the server with arbitrary CWD.
-try {
+function resolveEnvCandidates() {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
-    const projectRootEnv = path.resolve(__dirname, '../../.env');
-    const envCandidates = [
-        projectRootEnv, // deterministic for both src/utils and dist/utils
+    return [
+        path.resolve(__dirname, '../../.env'),
         path.resolve(process.cwd(), '.env'),
-        path.resolve(__dirname, '../.env') // legacy fallback
+        path.resolve(__dirname, '../.env')
     ];
+}
 
-    for (const envPath of envCandidates) {
-        if (fs.existsSync(envPath)) {
-            dotenv.config({ path: envPath, override: true, quiet: true } as any);
-            loadedEnvPath = envPath;
-            break;
-        }
+export function loadEnv(options?: { override?: boolean; forceReload?: boolean }) {
+    if (envLoaded && !options?.forceReload) {
+        return loadedEnvPath;
     }
-} catch {
-    // silently continue
+
+    const envCandidates = resolveEnvCandidates();
+    for (const envPath of envCandidates) {
+        if (!fs.existsSync(envPath)) continue;
+        dotenv.config({
+            path: envPath,
+            override: options?.override ?? false,
+            quiet: true
+        } as any);
+        loadedEnvPath = envPath;
+        envLoaded = true;
+        return loadedEnvPath;
+    }
+
+    envLoaded = true;
+    loadedEnvPath = null;
+    return null;
 }
 
 export const configSchema = z.object({
@@ -56,17 +68,12 @@ export function parseScrapeConfig(env: NodeJS.ProcessEnv = process.env): ScrapeC
 }
 
 export function getConfigDiagnostics() {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    const envCandidates = [
-        path.resolve(__dirname, '../../.env'),
-        path.resolve(process.cwd(), '.env'),
-        path.resolve(__dirname, '../.env')
-    ];
+    const envCandidates = resolveEnvCandidates();
 
     return {
         process_cwd: process.cwd(),
         loaded_env_path: loadedEnvPath,
+        env_loaded: envLoaded,
         resolved_storage_dir: resolveStorageDir(process.env.STORAGE_DIR),
         env_candidates: envCandidates.map((p) => ({ path: p, exists: fs.existsSync(p) })),
         has_openai_key: Boolean(process.env.OPENAI_API_KEY),
@@ -94,6 +101,7 @@ export function getConfig(): Config {
     if (cachedConfig) return cachedConfig;
 
     try {
+        loadEnv();
         cachedConfig = parseConfig();
         return cachedConfig;
     } catch (error) {

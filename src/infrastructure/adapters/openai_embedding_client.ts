@@ -7,16 +7,13 @@ export interface EmbeddingClient {
 }
 
 export class OpenAIEmbeddingClient implements EmbeddingClient {
-    private readonly apiKey: string;
+    private readonly apiKey?: string;
     private readonly dimensions: number;
     private readonly model: string;
     private openai: OpenAI | null = null;
 
     constructor(options: { apiKey?: string; dimensions?: number; model?: string }) {
         const apiKey = options.apiKey;
-        if (!apiKey || apiKey === "dummy-key" || apiKey.includes("your-openai-api-key")) {
-            throw createError("INTERNAL", "OPENAI_API_KEY not found or is invalid. Vector indexing requires a valid API key in the .env file.");
-        }
         this.apiKey = apiKey;
         this.dimensions = options.dimensions ?? 512;
         this.model = options.model ?? "text-embedding-3-small";
@@ -24,6 +21,9 @@ export class OpenAIEmbeddingClient implements EmbeddingClient {
 
     private getClient(): OpenAI {
         if (!this.openai) {
+            if (!this.apiKey || this.apiKey === "dummy-key" || this.apiKey.includes("your-openai-api-key")) {
+                throw createError("INTERNAL", "Embedding provider not configured. Set OPENAI_API_KEY to use import/search tools.");
+            }
             this.openai = new OpenAI({ apiKey: this.apiKey });
         }
         return this.openai;

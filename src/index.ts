@@ -1,4 +1,4 @@
-import { getConfig } from "./utils/config.js";
+import { getConfig, loadEnv } from "./utils/config.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -9,6 +9,7 @@ import { dispatchToolCall } from "./app/tool_dispatcher.js";
 import { AppError } from "./utils/errors.js";
 import { resolveStorageDir } from "./utils/config.js";
 import { logger } from "./utils/logger.js";
+import crypto from "crypto";
 
 function buildRuntimeDeps() {
     // Validate configuration once at the composition root before creating dependencies.
@@ -22,8 +23,6 @@ function buildRuntimeDeps() {
     };
 }
 
-const { vectorStore, llmClient } = buildRuntimeDeps();
-
 const server = new Server(
     {
         name: "ReviewRadar-MCP",
@@ -36,17 +35,37 @@ const server = new Server(
     }
 );
 
+let runtimeDeps: ReturnType<typeof buildRuntimeDeps> | null = null;
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
     return { tools: [...TOOL_DEFINITIONS] };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const requestId = crypto.randomUUID();
     try {
-        return await dispatchToolCall(request.params.name, request.params.arguments, { vectorStore, llmClient });
+        if (!runtimeDeps) {
+            runtimeDeps = buildRuntimeDeps();
+        }
+        return await dispatchToolCall(
+            request.params.name,
+            request.params.arguments,
+            runtimeDeps,
+            { request_id: requestId, tool_name: request.params.name }
+        );
     } catch (error: unknown) {
         const err = error instanceof AppError
             ? error
             : new AppError("INTERNAL", "Unexpected internal error");
+
+        logger.error("tool.request.failed", {
+            request_id: requestId,
+            tool_name: request.params.name,
+            phase: "request_handler",
+            error_class: "internal",
+            code: err.code,
+            message: err.message
+        });
 
         return {
             content: [{ type: "text", text: JSON.stringify({ error: { code: err.code, message: err.message, details: err.details } }) }],
@@ -56,6 +75,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
+    loadEnv({ override: false });
+    runtimeDeps = buildRuntimeDeps();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     logger.info("server.started", { transport: "stdio", name: "ReviewRadar-MCP" });

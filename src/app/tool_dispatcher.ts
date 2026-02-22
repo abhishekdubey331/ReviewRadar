@@ -16,12 +16,26 @@ import { getConfigDiagnostics } from "../utils/config.js";
 import { createError } from "../utils/errors.js";
 import { IVectorStore } from "../domain/ports/vector_store.js";
 import { ILLMClient } from "../domain/ports/llm_client.js";
+import { logger } from "../utils/logger.js";
 import { z } from "zod";
 
 export interface DispatcherDeps {
     vectorStore: IVectorStore;
     llmClient: ILLMClient;
 }
+
+export interface DispatchContext {
+    request_id?: string;
+    tool_name?: string;
+}
+
+interface ToolHandlerContext {
+    args: unknown;
+    deps: DispatcherDeps;
+    context: DispatchContext;
+}
+
+type ToolHandler = (ctx: ToolHandlerContext) => Promise<unknown>;
 
 function asTextResponse(data: unknown) {
     return { content: [{ type: "text", text: JSON.stringify(data) }] };
@@ -74,66 +88,74 @@ const SearchToolArgsSchema = z.object({
     path: ["start_date"]
 });
 
-export async function dispatchToolCall(name: string, args: unknown, deps: DispatcherDeps) {
-    const { vectorStore, llmClient } = deps;
-    const toolArgs = args;
+const TOOL_HANDLERS: Record<string, ToolHandler> = {
+    reviews_import: async ({ args, deps }) => {
+        const result = await importReviews(args, deps.vectorStore);
+        const importData = result.data as Record<string, unknown>;
+        const { reviews: _reviews, ...sanitizedData } = importData;
+        return { data: sanitizedData };
+    },
+    reviews_analyze: ({ args, deps }) => analyzeReviewsTool(args, deps),
+    reviews_get_safety_alerts: ({ args, deps }) => getSafetyAlertsTool(args, deps.vectorStore),
+    reviews_summarize: ({ args, deps }) => summarizeTool(args, deps.llmClient),
+    reviews_reply_suggest: ({ args, deps }) => replySuggestTool(args, deps.llmClient),
+    reviews_export: ({ args }) => exportTool(args),
+    reviews_top_issues: ({ args }) => topIssuesTool(args),
+    reviews_segment_breakdown: ({ args }) => segmentBreakdownTool(args),
+    reviews_time_trends: ({ args }) => timeTrendsTool(args),
+    reviews_compare_windows: ({ args }) => compareWindowsTool(args),
+    reviews_spike_detection: ({ args }) => spikeDetectionTool(args),
+    reviews_priority_scoring: ({ args }) => priorityScoringTool(args),
+    reviews_feature_ownership_map: ({ args }) => featureOwnershipMapTool(args),
+    reviews_weekly_report: ({ args }) => weeklyReportTool(args),
+    reviews_search: async ({ args, deps }) => {
+        const parsedArgs = asRecord(args);
+        const searchParse = SearchToolArgsSchema.safeParse(parsedArgs);
+        if (!searchParse.success) {
+            throw createError("INVALID_SCHEMA", "Invalid search parameters", searchParse.error.format());
+        }
 
-    switch (name) {
-        case "reviews_import": {
-            const result = await importReviews(toolArgs, vectorStore);
-            const importData = result.data as Record<string, unknown>;
-            const { reviews: _reviews, ...sanitizedData } = importData;
-            return asTextResponse({ data: sanitizedData });
-        }
-        case "reviews_analyze":
-            return asTextResponse(await analyzeReviewsTool(toolArgs, { vectorStore, llmClient }));
-        case "reviews_get_safety_alerts":
-            return asTextResponse(await getSafetyAlertsTool(toolArgs, vectorStore));
-        case "reviews_summarize":
-            return asTextResponse(await summarizeTool(toolArgs, llmClient));
-        case "reviews_reply_suggest":
-            return asTextResponse(await replySuggestTool(toolArgs, llmClient));
-        case "reviews_export":
-            return asTextResponse(await exportTool(toolArgs));
-        case "reviews_top_issues":
-            return asTextResponse(await topIssuesTool(toolArgs));
-        case "reviews_segment_breakdown":
-            return asTextResponse(await segmentBreakdownTool(toolArgs));
-        case "reviews_time_trends":
-            return asTextResponse(await timeTrendsTool(toolArgs));
-        case "reviews_compare_windows":
-            return asTextResponse(await compareWindowsTool(toolArgs));
-        case "reviews_spike_detection":
-            return asTextResponse(await spikeDetectionTool(toolArgs));
-        case "reviews_priority_scoring":
-            return asTextResponse(await priorityScoringTool(toolArgs));
-        case "reviews_feature_ownership_map":
-            return asTextResponse(await featureOwnershipMapTool(toolArgs));
-        case "reviews_weekly_report":
-            return asTextResponse(await weeklyReportTool(toolArgs));
-        case "reviews_search": {
-            const parsedArgs = asRecord(args);
-            const searchParse = SearchToolArgsSchema.safeParse(parsedArgs);
-            if (!searchParse.success) {
-                throw createError("INVALID_SCHEMA", "Invalid search parameters", searchParse.error.format());
-            }
+        const { query, ...options } = searchParse.data;
+        const results = await deps.vectorStore.search(query, options);
+        return { results };
+    },
+    reviews_get_index_status: ({ deps }) => deps.vectorStore.getIndexStatus(),
+    reviews_diagnose_runtime: async ({ deps }) => ({
+        node_version: process.version,
+        process_cwd: process.cwd(),
+        config: getConfigDiagnostics(),
+        storage: deps.vectorStore.getStorageDiagnostics()
+    })
+};
 
-            const { query, ...options } = searchParse.data;
-            const results = await vectorStore.search(query, options);
-            return asTextResponse({ results });
-        }
-        case "reviews_get_index_status":
-            return asTextResponse(await vectorStore.getIndexStatus());
-        case "reviews_diagnose_runtime": {
-            const data = {
-                node_version: process.version,
-                process_cwd: process.cwd(),
-                config: getConfigDiagnostics(),
-                storage: vectorStore.getStorageDiagnostics()
-            };
-            return asTextResponse(data);
-        }
-        default:
-            throw createError("INVALID_SCHEMA", "Tool not found", { tool_name: name });
+export async function dispatchToolCall(name: string, args: unknown, deps: DispatcherDeps, context: DispatchContext = {}) {
+    const handler = TOOL_HANDLERS[name];
+    if (!handler) {
+        throw createError("INVALID_SCHEMA", "Tool not found", { tool_name: name });
+    }
+
+    logger.info("tool.dispatch.start", {
+        request_id: context.request_id,
+        tool_name: name,
+        phase: "dispatch"
+    });
+
+    try {
+        const data = await handler({ args, deps, context: { ...context, tool_name: name } });
+        logger.info("tool.dispatch.success", {
+            request_id: context.request_id,
+            tool_name: name,
+            phase: "dispatch"
+        });
+        return asTextResponse(data);
+    } catch (error) {
+        logger.error("tool.dispatch.failed", {
+            request_id: context.request_id,
+            tool_name: name,
+            phase: "dispatch",
+            error_class: "internal",
+            message: error instanceof Error ? error.message : String(error)
+        });
+        throw error;
     }
 }
