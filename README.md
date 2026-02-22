@@ -120,9 +120,4 @@ To run TypeScript verification against standard implementations:
 npm run verify
 ```
 
-## 🤝 Contributing
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](#) if you want to contribute.
-
-## 📝 License
-Copyright © 2024.
-This project is [MIT](#) licensed.
+## Contributing`nContributions, issues, and feature requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and use the repository issue tracker for bugs and proposals.`n`n## License`nThis project is licensed under the [MIT License](LICENSE).
