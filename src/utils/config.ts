@@ -33,7 +33,8 @@ export const configSchema = z.object({
     APP_LINK: z.string().url("APP_LINK must be a valid URL"),
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
-    MAX_BATCH_BUDGET_USD: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid currency amount").default("5.00")
+    MAX_BATCH_BUDGET_USD: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid currency amount").default("5.00"),
+    STORAGE_DIR: z.string().min(1).default("storage")
 }).refine(data => data.OPENAI_API_KEY || data.ANTHROPIC_API_KEY, {
     message: "Either OPENAI_API_KEY or ANTHROPIC_API_KEY must be provided",
     path: ["OPENAI_API_KEY"]
@@ -57,11 +58,25 @@ export function getConfigDiagnostics() {
     return {
         process_cwd: process.cwd(),
         loaded_env_path: loadedEnvPath,
+        resolved_storage_dir: resolveStorageDir(process.env.STORAGE_DIR),
         env_candidates: envCandidates.map((p) => ({ path: p, exists: fs.existsSync(p) })),
         has_openai_key: Boolean(process.env.OPENAI_API_KEY),
         has_anthropic_key: Boolean(process.env.ANTHROPIC_API_KEY),
         configured_provider: process.env.OPENAI_API_KEY ? 'openai' : (process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'none')
     };
+}
+
+function getProjectRoot(): string {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    return path.resolve(__dirname, "../..");
+}
+
+export function resolveStorageDir(storageDir?: string): string {
+    const configured = storageDir?.trim() || "storage";
+    return path.isAbsolute(configured)
+        ? configured
+        : path.resolve(getProjectRoot(), configured);
 }
 
 let cachedConfig: Config | null = null;

@@ -22,7 +22,8 @@ describe('Concurrent LLM Client (Anthropic Native)', () => {
         vi.spyOn(configModule, 'getConfig').mockReturnValue({
             APP_LINK: 'https://play.google.com/store/apps/details?id=com.whatsapp',
             ANTHROPIC_API_KEY: 'test-key',
-            MAX_BATCH_BUDGET_USD: '5.00'
+            MAX_BATCH_BUDGET_USD: '5.00',
+            STORAGE_DIR: 'storage'
         });
         client = new ConcurrentLLMClient({ apiKey: 'test' });
     });

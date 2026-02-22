@@ -7,11 +7,6 @@ import pLimit from "p-limit";
 import retry from "async-retry";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 
-const PROJECT_ROOT = process.cwd();
-const STORAGE_DIR = path.resolve(PROJECT_ROOT, "storage");
-const INDEX_FILE = path.join(STORAGE_DIR, "vector_index.json");
-const METADATA_FILE = path.join(STORAGE_DIR, "metadata.json");
-
 function formatProviderError(error: any): string {
     if (!error) return "unknown error";
     const status = error.status ? `status=${error.status}` : null;
@@ -33,8 +28,15 @@ export class VoyVectorStore implements IVectorStore {
     private indexedMetadata: Map<string, any> = new Map();
     private readonly embeddingDimensions = 512;
     private readonly voyAddBatchSize = 250;
+    private readonly storageDir: string;
+    private readonly indexFile: string;
+    private readonly metadataFile: string;
 
-    constructor() { }
+    constructor(options?: { storageDir?: string }) {
+        this.storageDir = options?.storageDir ?? path.resolve(process.cwd(), "storage");
+        this.indexFile = path.join(this.storageDir, "vector_index.json");
+        this.metadataFile = path.join(this.storageDir, "metadata.json");
+    }
 
     private getOpenAI(): OpenAI {
         const apiKey = process.env.OPENAI_API_KEY;
@@ -67,9 +69,9 @@ export class VoyVectorStore implements IVectorStore {
 
     private async ensureInitialized() {
         if (!this.voy) {
-            if (fs.existsSync(INDEX_FILE)) {
+            if (fs.existsSync(this.indexFile)) {
                 try {
-                    const serialized = fs.readFileSync(INDEX_FILE, "utf8");
+                    const serialized = fs.readFileSync(this.indexFile, "utf8");
                     this.voy = Voy.deserialize(serialized);
                     this.isInitialized = true;
                     console.error("Loaded persistent vector index from disk.");
@@ -82,9 +84,9 @@ export class VoyVectorStore implements IVectorStore {
             }
         }
 
-        if (this.indexedMetadata.size === 0 && fs.existsSync(METADATA_FILE)) {
+        if (this.indexedMetadata.size === 0 && fs.existsSync(this.metadataFile)) {
             try {
-                const meta = JSON.parse(fs.readFileSync(METADATA_FILE, "utf8"));
+                const meta = JSON.parse(fs.readFileSync(this.metadataFile, "utf8"));
                 if (meta.reviews && typeof meta.reviews === "object") {
                     this.indexedMetadata = new Map(Object.entries(meta.reviews));
                 } else if (Array.isArray(meta.indexed_ids)) {
@@ -99,17 +101,17 @@ export class VoyVectorStore implements IVectorStore {
     private async save() {
         if (!this.voy) return;
         try {
-            if (!fs.existsSync(STORAGE_DIR)) {
-                fs.mkdirSync(STORAGE_DIR, { recursive: true });
+            if (!fs.existsSync(this.storageDir)) {
+                fs.mkdirSync(this.storageDir, { recursive: true });
             }
             const serialized = this.voy.serialize();
-            fs.writeFileSync(INDEX_FILE, serialized, "utf8");
+            fs.writeFileSync(this.indexFile, serialized, "utf8");
 
             const metadataToSave = {
                 reviews: Object.fromEntries(this.indexedMetadata),
                 updated_at: new Date().toISOString()
             };
-            fs.writeFileSync(METADATA_FILE, JSON.stringify(metadataToSave, null, 2), "utf8");
+            fs.writeFileSync(this.metadataFile, JSON.stringify(metadataToSave, null, 2), "utf8");
 
             console.error(`Vector index and metadata (${this.indexedMetadata.size} reviews) saved to disk.`);
         } catch (e) {
@@ -320,11 +322,11 @@ export class VoyVectorStore implements IVectorStore {
     async clear(): Promise<void> {
         if (this.voy) {
             this.voy.clear();
-            if (fs.existsSync(INDEX_FILE)) {
-                fs.unlinkSync(INDEX_FILE);
+            if (fs.existsSync(this.indexFile)) {
+                fs.unlinkSync(this.indexFile);
             }
-            if (fs.existsSync(METADATA_FILE)) {
-                fs.unlinkSync(METADATA_FILE);
+            if (fs.existsSync(this.metadataFile)) {
+                fs.unlinkSync(this.metadataFile);
             }
         }
         this.indexedMetadata.clear();
@@ -352,20 +354,20 @@ export class VoyVectorStore implements IVectorStore {
             },
             is_ready: total > 0 && withScore > 0,
             storage_paths: {
-                index: INDEX_FILE,
-                metadata: METADATA_FILE
+                index: this.indexFile,
+                metadata: this.metadataFile
             }
         };
     }
 
     getStorageDiagnostics(): StorageDiagnostics {
         return {
-            storage_dir: STORAGE_DIR,
-            index_file: INDEX_FILE,
-            metadata_file: METADATA_FILE,
-            storage_dir_exists: fs.existsSync(STORAGE_DIR),
-            index_exists: fs.existsSync(INDEX_FILE),
-            metadata_exists: fs.existsSync(METADATA_FILE)
+            storage_dir: this.storageDir,
+            index_file: this.indexFile,
+            metadata_file: this.metadataFile,
+            storage_dir_exists: fs.existsSync(this.storageDir),
+            index_exists: fs.existsSync(this.indexFile),
+            metadata_exists: fs.existsSync(this.metadataFile)
         };
     }
 }

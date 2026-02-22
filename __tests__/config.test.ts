@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-import { configSchema, parseConfig, isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics } from '../src/utils/config.js';
+import { configSchema, parseConfig, isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics, resolveStorageDir } from '../src/utils/config.js';
+import path from 'path';
 
 describe('Configuration Validation', () => {
 
@@ -85,5 +86,12 @@ describe('Configuration diagnostics', () => {
         expect(diagnostics.has_openai_key).toBe(true);
         expect(diagnostics.configured_provider).toBe('openai');
         expect(diagnostics).not.toHaveProperty('openai_key_preview');
+        expect(typeof diagnostics.resolved_storage_dir).toBe('string');
+    });
+
+    it('resolves relative storage directory from project root', () => {
+        const resolved = resolveStorageDir('storage');
+        expect(path.isAbsolute(resolved)).toBe(true);
+        expect(resolved.endsWith('storage')).toBe(true);
     });
 });

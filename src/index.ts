@@ -7,12 +7,13 @@ import { ConcurrentLLMClient } from "./engine/llmClient.js";
 import { TOOL_DEFINITIONS } from "./app/tool_registry.js";
 import { dispatchToolCall } from "./app/tool_dispatcher.js";
 import { AppError } from "./utils/errors.js";
+import { resolveStorageDir } from "./utils/config.js";
 
 function buildRuntimeDeps() {
     // Validate configuration once at the composition root before creating dependencies.
-    getConfig();
+    const config = getConfig();
     return {
-        vectorStore: new VoyVectorStore(),
+        vectorStore: new VoyVectorStore({ storageDir: resolveStorageDir(config.STORAGE_DIR) }),
         llmClient: new ConcurrentLLMClient({ concurrency: 10 })
     };
 }

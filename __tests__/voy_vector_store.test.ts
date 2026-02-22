@@ -3,6 +3,7 @@ import { VoyVectorStore } from '../src/infrastructure/adapters/voy_vector_store.
 import fs from 'fs';
 import OpenAI from 'openai';
 import { Voy } from 'voy-search/voy_search.js';
+import path from 'path';
 
 // Mock dependencies
 vi.mock('fs');
@@ -181,5 +182,15 @@ describe('VoyVectorStore', () => {
         expect(count).toBe(120);
         expect(addMock).toHaveBeenCalled();
         expect(fs.writeFileSync).toHaveBeenCalled();
+    });
+
+    it('should use configured storage directory for diagnostics', () => {
+        const storageDir = path.resolve(process.cwd(), 'custom_storage');
+        const store = new VoyVectorStore({ storageDir });
+        const diagnostics: any = store.getStorageDiagnostics();
+
+        expect(diagnostics.storage_dir).toBe(storageDir);
+        expect(diagnostics.index_file).toContain(path.join('custom_storage', 'vector_index.json'));
+        expect(diagnostics.metadata_file).toContain(path.join('custom_storage', 'metadata.json'));
     });
 });
