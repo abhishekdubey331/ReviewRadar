@@ -8,6 +8,7 @@ import { CircuitBreaker } from '../engine/circuitBreaker.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
+import pLimit from 'p-limit';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -50,8 +51,9 @@ export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorSto
 
     const finalReviews: any[] = [];
     const safety_alerts: any[] = [];
+    const processingLimit = pLimit(options?.concurrency ?? 15);
 
-    const processPromises = rawInputReviews.map(async (review: any) => {
+    const processReview = async (review: any) => {
         const redacted = redactPII(review.content);
         const rulesRes = evaluateRules(redacted, review.score);
 
@@ -93,9 +95,11 @@ export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorSto
         }
 
         return { type: 'processed' as const, review, finalOutput, needsLlm };
-    });
+    };
 
-    const results = await Promise.all(processPromises);
+    const results = await Promise.all(
+        rawInputReviews.map((review: any) => processingLimit(() => processReview(review)))
+    );
 
     for (const res of results) {
         if (res.type === 'spam') {
