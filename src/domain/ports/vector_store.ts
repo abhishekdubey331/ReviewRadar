@@ -8,6 +8,24 @@ export interface VectorSearchOptions {
     sort_direction?: "asc" | "desc";
 }
 
+export interface ReviewRecord {
+    review_id: string;
+    content: string;
+    score?: number;
+    review_created_at?: string;
+    user_name?: string;
+    [key: string]: unknown;
+}
+
+export interface VectorSearchResult {
+    id: string;
+    relevance_rank: number;
+    author?: string;
+    content?: string;
+    score?: number;
+    date?: string;
+}
+
 export interface IndexStatus {
     total_indexed: number;
     metadata_health: {
@@ -23,10 +41,14 @@ export interface IndexStatus {
     };
 }
 
+export interface StorageDiagnostics {
+    [key: string]: unknown;
+}
+
 export interface IVectorStore {
-    indexReviews(reviews: any[]): Promise<number>;
-    search(query: string, options?: VectorSearchOptions): Promise<any[]>;
+    indexReviews(reviews: ReviewRecord[]): Promise<number>;
+    search(query: string, options?: VectorSearchOptions): Promise<VectorSearchResult[]>;
     clear(): Promise<void>;
     getIndexStatus(): Promise<IndexStatus>;
-    getStorageDiagnostics(): any;
+    getStorageDiagnostics(): StorageDiagnostics;
 }

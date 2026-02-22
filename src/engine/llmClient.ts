@@ -59,7 +59,20 @@ export class ConcurrentLLMClient implements ILLMClient {
                                 max_tokens: 1024,
                                 messages: [{ role: 'user', content: prompt }]
                             });
-                            return response as LLMResponse;
+                            const textBlocks = response.content
+                                .filter((block) => block.type === 'text')
+                                .map((block) => ({
+                                    type: 'text',
+                                    text: 'text' in block ? String(block.text || '') : ''
+                                }));
+
+                            return {
+                                content: textBlocks.length > 0 ? textBlocks : [{ type: 'text', text: '' }],
+                                usage: {
+                                    input_tokens: response.usage?.input_tokens || 0,
+                                    output_tokens: response.usage?.output_tokens || 0
+                                }
+                            } as LLMResponse;
                         }
                         throw new Error("No LLM provider initialized");
                     } catch (error: any) {

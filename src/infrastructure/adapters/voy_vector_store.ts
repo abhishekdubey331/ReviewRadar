@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import pLimit from "p-limit";
 import retry from "async-retry";
-import { IVectorStore, VectorSearchOptions, IndexStatus } from "../../domain/ports/vector_store.js";
+import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 
 const PROJECT_ROOT = process.cwd();
 const STORAGE_DIR = path.resolve(PROJECT_ROOT, "storage");
@@ -155,7 +155,7 @@ export class VoyVectorStore implements IVectorStore {
         }
     }
 
-    async indexReviews(reviews: any[]): Promise<number> {
+    async indexReviews(reviews: ReviewRecord[]): Promise<number> {
         await this.ensureInitialized();
 
         const newReviews = reviews.filter(r => !this.indexedMetadata.has(String(r.review_id)));
@@ -245,7 +245,7 @@ export class VoyVectorStore implements IVectorStore {
         }
     }
 
-    async search(query: string, options: VectorSearchOptions = {}): Promise<any[]> {
+    async search(query: string, options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
         await this.ensureInitialized();
         const { limit = 5, min_score, max_score, start_date, end_date, sort_by = "relevance", sort_direction = "desc" } = options;
 
@@ -358,7 +358,7 @@ export class VoyVectorStore implements IVectorStore {
         };
     }
 
-    getStorageDiagnostics(): any {
+    getStorageDiagnostics(): StorageDiagnostics {
         return {
             storage_dir: STORAGE_DIR,
             index_file: INDEX_FILE,
