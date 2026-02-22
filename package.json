@@ -1,7 +1,7 @@
 {
-  "name": "greenlight-app-reviews-mcp",
+  "name": "reviewradar-mcp",
   "version": "1.0.0",
-  "description": "Greenlight App Review Intelligence MCP Server",
+  "description": "ReviewRadar MCP server for app review ingestion and analysis",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

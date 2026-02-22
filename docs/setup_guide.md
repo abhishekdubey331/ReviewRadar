@@ -1,6 +1,6 @@
 # Developer Setup & Onboarding Guide
 
-Welcome to the ReviewRadar MCP repository. Ensure you read the `docs/PRD.md` and `docs/execution_plan.md` before writing code.
+Welcome to the ReviewRadar MCP repository. Ensure you read `docs/PRD.md` and `docs/testing_guidelines.md` before writing code.
 
 ## 1. Local Environment Setup
 
@@ -51,10 +51,10 @@ To actually test your code and MCP tools, you must "install" your local server i
 3. Click **Add New MCP Server**.
 4. Set the Type to: `command`.
 5. Name it: `ReviewRadar-Dev`.
-6. Command: `node /absolute/path/to/ReviewRadar/build/index.js`
+6. Command: `node /absolute/path/to/ReviewRadar/dist/index.js`
 7. Click Save. 
 
-You can now open a Cursor Chat window and simply type: *"Can you use the reviews.analyze tool to check this fake review: 'The app crashes when I open my location sharing'?"*
+You can now open a Cursor Chat window and type: *"Can you use the reviews_analyze tool to check this fake review: 'The app crashes when I open my location sharing'?"*
 
 ## 4. Running the Evaluation Harness
 Before making any commits (see `docs/testing_guidelines.md`), you must run the Vitest suite:
@@ -62,7 +62,4 @@ Before making any commits (see `docs/testing_guidelines.md`), you must run the V
 ```bash
 npm run test
 ```
-To run the final golden dataset verification (Milestone 4):
-```bash
-npm run test:golden
-```
+If you add a golden dataset workflow later, document the script name in `package.json` and this guide in the same change.

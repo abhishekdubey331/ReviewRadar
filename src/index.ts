@@ -22,7 +22,7 @@ const { vectorStore, llmClient } = buildRuntimeDeps();
 
 const server = new Server(
     {
-        name: "Greenlight-App-Reviews-MCP",
+        name: "ReviewRadar-MCP",
         version: "1.0.0",
     },
     {
@@ -54,7 +54,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Greenlight App Reviews MCP Server running on stdio");
+    console.error("ReviewRadar MCP server running on stdio");
 }
 
 main().catch((error) => {

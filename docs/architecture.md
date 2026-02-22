@@ -13,7 +13,7 @@ sequenceDiagram
     participant External APIs (Anthropic/OpenAI)
 
     User->>Host LLM: "What are the biggest P0 complaints?"
-    Host LLM->>MCP Server: Call tool `reviews.analyze(path: "reviews.json")`
+    Host LLM->>MCP Server: Call tool `reviews_analyze(source: { ... })`
     Note over MCP Server: Executes Phase 1 (Rules/PII)
     Note over MCP Server: Executes Phase 2 (Selective LLM)
     MCP Server-->>External APIs: Batch routed reviews (if needed)
@@ -23,7 +23,7 @@ sequenceDiagram
 ```
 
 ## 2. Review Processing Pipeline (Internal Flow)
-When `reviews.analyze` or `reviews.summarize` is called, the data passes through our strict 2-Phase pipeline.
+When `reviews_analyze` or `reviews_summarize` is called, the data passes through our strict 2-Phase pipeline.
 
 ```mermaid
 flowchart TD
