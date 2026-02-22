@@ -1,17 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-
-// We need to re-import or re-evaluate the schema directly for testing 
-// since the actual module uses process.exit on failure.
-export const configSchema = z.object({
-    APP_LINK: z.string().url(),
-    OPENAI_API_KEY: z.string().optional(),
-    ANTHROPIC_API_KEY: z.string().optional(),
-}).refine(data => data.OPENAI_API_KEY || data.ANTHROPIC_API_KEY, {
-    message: "Either OPENAI_API_KEY or ANTHROPIC_API_KEY must be provided"
-});
-
-import { isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics } from '../src/utils/config.js';
+import { configSchema, parseConfig, isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics } from '../src/utils/config.js';
 
 describe('Configuration Validation', () => {
 
@@ -44,6 +33,10 @@ describe('Configuration Validation', () => {
             APP_LINK: 'not-a-url'
         });
         expect(result.success).toBe(false);
+    });
+
+    it('parseConfig throws zod error for invalid env', () => {
+        expect(() => parseConfig({ APP_LINK: 'invalid-url' } as NodeJS.ProcessEnv)).toThrow(z.ZodError);
     });
 
 });

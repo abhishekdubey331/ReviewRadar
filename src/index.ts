@@ -7,9 +7,6 @@ import { ConcurrentLLMClient } from "./engine/llmClient.js";
 import { TOOL_DEFINITIONS } from "./app/tool_registry.js";
 import { dispatchToolCall } from "./app/tool_dispatcher.js";
 
-// Validate environment on boot
-getConfig();
-
 const vectorStore = new VoyVectorStore();
 const llmClient = new ConcurrentLLMClient({ apiKey: process.env.ANTHROPIC_API_KEY || "MOCK_KEY", concurrency: 10 });
 
@@ -41,6 +38,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 });
 
 async function main() {
+    getConfig();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Greenlight App Reviews MCP Server running on stdio");
