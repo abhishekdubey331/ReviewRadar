@@ -23,8 +23,6 @@ export const AnalyzeToolInputSchema = z.object({
     options: AnalyzeOptionsSchema.optional(),
 });
 
-const cb = new CircuitBreaker();
-
 export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
@@ -40,6 +38,7 @@ export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorSto
     });
 
     const startTime = Date.now();
+    const cb = new CircuitBreaker();
     let filtered_spam = 0;
     let llm_routed_count = 0;
     let rule_only_count = 0;

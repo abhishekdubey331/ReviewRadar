@@ -58,4 +58,25 @@ describe('Analyze Tool', () => {
         // Cost estimate should be > 0 due to 1 LLM request
         expect(result.data.metadata.cost_estimate_usd).toBeGreaterThan(0);
     });
+
+    it('does not leak circuit-breaker metrics across separate analyze calls', async () => {
+        const input = {
+            source: { type: "inline", reviews: [{ review_id: 'r1', content: 'app keeps crashing', score: 1 }, { review_id: 'r2', content: 'good app', score: 5 }] },
+            options: { concurrency: 1 }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const first: any = await analyzeReviewsTool(input, mockVectorStore);
+        const second: any = await analyzeReviewsTool(input, mockVectorStore);
+
+        expect(first.data.metadata.cost_estimate_usd).toBeGreaterThan(0);
+        expect(second.data.metadata.cost_estimate_usd).toBe(first.data.metadata.cost_estimate_usd);
+    });
 });
