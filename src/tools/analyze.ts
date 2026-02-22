@@ -1,15 +1,14 @@
 import { z } from 'zod';
 import pLimit from 'p-limit';
-import { SourceSchema, AnalyzedReviewSchema } from '../schemas/shared.js';
+import { SourceSchema } from '../schemas/shared.js';
 import { loadReviews } from './import.js';
-import { evaluateRules } from '../engine/rules.js';
-import { isLlmRequired } from '../engine/routing.js';
 import { CircuitBreaker } from '../engine/circuitBreaker.js';
-import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
-import { ILLMClient, LLMResponse } from '../domain/ports/llm_client.js';
+import { ILLMClient } from '../domain/ports/llm_client.js';
 import { logger } from '../utils/logger.js';
+import { getRuntimePolicy } from '../utils/runtime_policy.js';
+import { buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -30,146 +29,6 @@ export interface AnalyzeDeps {
     llmClient: ILLMClient;
 }
 
-interface LoadedReview {
-    review_id: string;
-    content: string;
-    score: number;
-    device?: string;
-    os_version?: string;
-    app_version?: string;
-}
-
-interface LlmClassification {
-    feature_area?: string;
-    issue_type?: string;
-    severity?: string;
-}
-
-interface ClassificationOutput {
-    issue_type: string;
-    feature_area: string;
-    severity?: string;
-    sentiment?: string;
-    confidence_score: number;
-    classification_source: 'rule_engine' | 'llm' | 'hybrid';
-    is_spam: boolean;
-}
-
-type ReviewProcessingResult =
-    | { type: 'spam' }
-    | {
-        type: 'processed';
-        review: LoadedReview;
-        needsLlm: boolean;
-        output: ClassificationOutput;
-    };
-
-function firstTextContent(resp: LLMResponse): string {
-    if (Array.isArray(resp.content) && resp.content[0]?.type === 'text') {
-        return resp.content[0].text || '{}';
-    }
-    return '{}';
-}
-
-function parseLlmClassification(rawText: string): LlmClassification {
-    try {
-        const parsed = JSON.parse(rawText) as LlmClassification;
-        return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-        return {};
-    }
-}
-
-function mergeRuleAndLlm(ruleOutput: ClassificationOutput, llmOutput: LlmClassification): ClassificationOutput {
-    return {
-        ...ruleOutput,
-        feature_area: llmOutput.feature_area || ruleOutput.feature_area,
-        issue_type: llmOutput.issue_type || (ruleOutput.issue_type === 'Unknown' ? 'Bug' : ruleOutput.issue_type),
-        severity: llmOutput.severity || ruleOutput.severity,
-        classification_source: 'hybrid'
-    };
-}
-
-async function processSingleReview(
-    review: LoadedReview,
-    llmClient: ILLMClient,
-    routingModel: string,
-    circuitBreaker: CircuitBreaker
-): Promise<ReviewProcessingResult> {
-    const redacted = redactPII(review.content);
-    const rulesRes = evaluateRules(redacted, review.score);
-
-    if (rulesRes.is_spam) {
-        return { type: 'spam' };
-    }
-
-    const needsLlm = isLlmRequired(rulesRes);
-    if (!needsLlm) {
-        return { type: 'processed', review, needsLlm, output: rulesRes };
-    }
-
-    try {
-        const prompt = `Classify this review (return JSON with feature_area, issue_type, severity):\nReview: ${redacted}`;
-        const llmResp = await llmClient.processPrompt(prompt, routingModel);
-        const parsed = parseLlmClassification(firstTextContent(llmResp));
-
-        const inTokens = llmResp.usage?.input_tokens || 50;
-        const outTokens = llmResp.usage?.output_tokens || 50;
-        circuitBreaker.recordSuccess(inTokens, outTokens);
-
-        return {
-            type: 'processed',
-            review,
-            needsLlm,
-            output: mergeRuleAndLlm(rulesRes, parsed)
-        };
-    } catch {
-        circuitBreaker.recordFailure();
-        return {
-            type: 'processed',
-            review,
-            needsLlm,
-            output: {
-                ...rulesRes,
-                classification_source: 'rule_engine'
-            }
-        };
-    }
-}
-
-function buildAnalyzedOutput(review: LoadedReview, output: ClassificationOutput, includeRawText: boolean) {
-    const mapped = {
-        review_id: review.review_id,
-        text: includeRawText ? review.content : redactPII(review.content),
-        issue_type: output.issue_type,
-        feature_area: output.feature_area,
-        severity: output.severity || 'FYI',
-        sentiment: output.sentiment || 'Neutral',
-        confidence_score: output.confidence_score,
-        classification_source: output.classification_source,
-        signals: {
-            summary: '',
-            repro_hints: [],
-            device: review.device || 'Unknown',
-            os_version: review.os_version || 'Unknown',
-            app_version: review.app_version || 'Unknown',
-            feature_mentions: []
-        }
-    };
-
-    return AnalyzedReviewSchema.parse(mapped);
-}
-
-function buildSafetyAlert(review: LoadedReview, output: ClassificationOutput, includeRawText: boolean) {
-    return {
-        review_id: review.review_id,
-        text: includeRawText ? review.content : redactPII(review.content),
-        feature_area: output.feature_area,
-        severity: output.severity || 'FYI',
-        requires_immediate_attention: output.severity === 'P0'
-    };
-}
-
 export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
@@ -179,6 +38,8 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const { source, options } = parseResult.data;
     const includeRawText = options?.include_raw_text ?? false;
     const { llmClient } = deps;
+    const runtimePolicy = getRuntimePolicy();
+    const budgetUsd = options?.budget_usd ?? runtimePolicy.default_analyze_budget_usd;
     const loaded = await loadReviews({ source });
     const rawInputReviews = loaded.reviews as LoadedReview[];
 
@@ -189,6 +50,9 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     let llm_routed_count = 0;
     let rule_only_count = 0;
     let hybrid_count = 0;
+    let timeout_count = 0;
+    let rate_limit_count = 0;
+    let budget_guardrail_count = 0;
 
     const models_used = {
         routing: options?.routing_model || 'claude-3-haiku-20240307',
@@ -201,7 +65,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
 
     const results = await Promise.all(
         rawInputReviews.map((review) =>
-            processingLimit(() => processSingleReview(review, llmClient, models_used.routing, circuitBreaker))
+            processingLimit(() => processSingleReview(review, llmClient, models_used.routing, circuitBreaker, budgetUsd))
         )
     );
 
@@ -212,6 +76,9 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
         }
 
         const out = result.output;
+        if (result.fallback_reason === 'timeout') timeout_count++;
+        if (result.fallback_reason === 'rate_limited') rate_limit_count++;
+        if (result.fallback_reason === 'budget_guardrail') budget_guardrail_count++;
         if (out.classification_source === 'hybrid') {
             hybrid_count++;
         } else {
@@ -240,6 +107,14 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const warnings: string[] = [];
     if (cbState.consecutiveFailures > 0) warnings.push('LLM Fallback Triggered');
     if (spam_ratio > 0.2) warnings.push('Suspiciously high spam ratio detected.');
+    if (budget_guardrail_count > 0) warnings.push('Budget guardrail triggered; routed reviews fell back to rule engine.');
+    const degraded_reasons = [
+        ...(cbState.consecutiveFailures > 0 ? ['llm_fallback_triggered'] : []),
+        ...(timeout_count > 0 ? ['llm_timeout'] : []),
+        ...(rate_limit_count > 0 ? ['rate_limited'] : []),
+        ...(budget_guardrail_count > 0 ? ['budget_guardrail'] : [])
+    ];
+    const degraded_mode = degraded_reasons.length > 0;
 
     if (rule_coverage_drop) {
         logger.warn('analyze.rule_coverage_drop', {
@@ -276,9 +151,13 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
                 hybrid_count,
                 rule_coverage_drop,
                 warnings,
-                rate_limit_count: 0,
-                retry_count: 0,
-                timeout_count: 0,
+                degraded_mode,
+                degraded_reasons,
+                budget_usd: budgetUsd,
+                budget_guardrail_count,
+                rate_limit_count,
+                retry_count: cbState.totalFailures,
+                timeout_count,
                 cost_estimate_usd: cbState.estimatedCostUsd,
                 execution_time_ms: Date.now() - startTime
             },

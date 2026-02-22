@@ -76,12 +76,13 @@ const SearchToolArgsSchema = z.object({
 
 export async function dispatchToolCall(name: string, args: unknown, deps: DispatcherDeps) {
     const { vectorStore, llmClient } = deps;
-    const toolArgs = args as any;
+    const toolArgs = args;
 
     switch (name) {
         case "reviews_import": {
             const result = await importReviews(toolArgs, vectorStore);
-            const { reviews, ...sanitizedData } = result.data as any;
+            const importData = result.data as Record<string, unknown>;
+            const { reviews: _reviews, ...sanitizedData } = importData;
             return asTextResponse({ data: sanitizedData });
         }
         case "reviews_analyze":

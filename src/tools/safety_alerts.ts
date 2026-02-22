@@ -21,7 +21,13 @@ export async function getSafetyAlertsTool(input: unknown, _vectorStore: IVectorS
     const startTime = Date.now();
     let filtered_spam = 0;
 
-    const safety_alerts: any[] = [];
+    const safety_alerts: Array<{
+        review_id: string;
+        text: string;
+        feature_area: string;
+        severity: string;
+        requires_immediate_attention: boolean;
+    }> = [];
 
     // Fast path: bypass LLM
     for (const review of rawInputReviews) {

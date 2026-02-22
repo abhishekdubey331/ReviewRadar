@@ -51,15 +51,15 @@ describe('reviews.get_safety_alerts tool', () => {
 
         const review2Alert = result.data.safety_alerts.find((a: any) => a.review_id === "2");
         expect(review2Alert).toBeDefined();
-        expect(review2Alert.severity).toBe("P0");
-        expect(review2Alert.requires_immediate_attention).toBe(true);
-        expect(review2Alert.text).toContain("[REDACTED]");
-        expect(review2Alert.text).not.toContain("john@example.com");
+        expect(review2Alert!.severity).toBe("P0");
+        expect(review2Alert!.requires_immediate_attention).toBe(true);
+        expect(review2Alert!.text).toContain("[REDACTED]");
+        expect(review2Alert!.text).not.toContain("john@example.com");
 
         const review3Alert = result.data.safety_alerts.find((a: any) => a.review_id === "3");
         expect(review3Alert).toBeDefined();
-        expect(review3Alert.severity).toBe("P1");
-        expect(review3Alert.requires_immediate_attention).toBe(false);
+        expect(review3Alert!.severity).toBe("P1");
+        expect(review3Alert!.requires_immediate_attention).toBe(false);
 
         // It should NOT contain the `reviews` array payload
         expect((result.data as any).reviews).toBeUndefined();
