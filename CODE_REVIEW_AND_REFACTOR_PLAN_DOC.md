@@ -7,7 +7,7 @@
 4. [~] [P1] Introduce structured logger and remove raw `console.*` in core runtime paths.
 5. [~] [P1] Refactor `analyze` into modular typed units.
 6. [x] [P1] Fix docs/runbook drift (invalid commands/paths and encoding corruption in README).
-7. [ ] [P1] Raise OSS quality gates (linting, stronger coverage thresholds, contract tests, release policy).
+7. [~] [P1] Raise OSS quality gates (linting, stronger coverage thresholds, contract tests, release policy).
 8. [ ] [P2] Add reliability hardening (timeouts budgets, explicit retry policy, degraded-mode metadata).
 
 ## Execution Tracker
@@ -19,6 +19,7 @@
 - Done: `81d9a07` extracted `OpenAIEmbeddingClient` from `VoyVectorStore` (`src/infrastructure/adapters/openai_embedding_client.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `8032b1f` extracted Voy persistence module for index/metadata load/save (`src/infrastructure/adapters/voy_persistence.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `fc8ea51` extracted vector search/filter/sort service from `VoyVectorStore` (`src/infrastructure/adapters/voy_search_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
+- Done: `c902999` strengthened quality gates (coverage thresholds, tool registry contract tests, release checklist) (`vitest.config.ts`, `__tests__/tool_registry_contract.test.ts`, `docs/release_checklist.md`, `CONTRIBUTING.md`).
 - Done: `3504052` tool registry schema tightening for `source`, `options`, and export payload shapes (`src/app/tool_registry.ts`).
 - In progress: deeper `VoyVectorStore` decomposition into index/metadata/search services (embedding service extracted).
 - In progress: remaining tool-registry/public-schema alignment.
