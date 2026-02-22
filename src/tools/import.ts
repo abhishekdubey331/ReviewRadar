@@ -84,6 +84,8 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
     }
 
     const reviewsMap = new Map<string, any>();
+    let invalidRowsDropped = 0;
+    let duplicatesDropped = 0;
 
     for (const raw of rawReviews) {
         if (source.type === "file") {
@@ -96,15 +98,20 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
 
             const reviewParse = ReviewInputSchema.safeParse(raw);
             if (!reviewParse.success) {
+                invalidRowsDropped++;
                 continue;
             }
             const review = reviewParse.data;
             if (!reviewsMap.has(review.review_id)) {
                 reviewsMap.set(review.review_id, review);
+            } else {
+                duplicatesDropped++;
             }
         } else {
             if (!reviewsMap.has(raw.review_id)) {
                 reviewsMap.set(raw.review_id, raw);
+            } else {
+                duplicatesDropped++;
             }
         }
     }
@@ -139,6 +146,8 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
                 processed_at: new Date().toISOString(),
                 total_reviews_input,
                 filtered_spam,
+                invalid_rows_dropped: invalidRowsDropped,
+                duplicates_dropped: duplicatesDropped,
                 spam_ratio: total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0,
                 total_processed: uniqueReviews.length,
                 import_status,
