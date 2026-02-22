@@ -16,7 +16,7 @@ vi.mock('../engine/llmClient.js', () => {
 
 describe('reviews.summarize', () => {
     it('groups reviews by FeatureArea and IssueType, and calculates aggregated counts correctly', async () => {
-        const mockClient = new ConcurrentLLMClient({ apiKey: 'mock' });
+        const mockClient = new ConcurrentLLMClient();
         const input = [
             { text: "Terrible crash!", feature_area: "Login", issue_type: "Bug", severity: "P0" },
             { text: "Can't log in.", feature_area: "Login", issue_type: "Bug", severity: "P0" },
@@ -35,7 +35,7 @@ describe('reviews.summarize', () => {
     });
 
     it('rejects oversized summarize payloads', async () => {
-        const mockClient = new ConcurrentLLMClient({ apiKey: 'mock' });
+        const mockClient = new ConcurrentLLMClient();
         const oversized = Array.from({ length: 5001 }, (_, idx) => ({
             text: `Review ${idx}`,
             feature_area: "Login",
@@ -50,7 +50,7 @@ describe('reviews.summarize', () => {
     });
 
     it('accepts analyzed-review payloads that omit text', async () => {
-        const mockClient = new ConcurrentLLMClient({ apiKey: 'mock' });
+        const mockClient = new ConcurrentLLMClient();
         const input = [{
             review_id: "r1",
             issue_type: "Bug",
