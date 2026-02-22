@@ -11,6 +11,24 @@ export const ImportToolInputSchema = z.object({
     source: SourceSchema.optional(),
 });
 
+function resolveDefaultSourcePath(): string {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const candidates = [
+        path.resolve(__dirname, '../../sample_data/scraped_reviews.csv'),
+        path.resolve(__dirname, '../../sample_data/reviews.csv'),
+        path.resolve(process.cwd(), 'sample_data/scraped_reviews.csv'),
+        path.resolve(process.cwd(), 'sample_data/reviews.csv')
+    ];
+
+    const existing = candidates.find((candidate) => existsSync(candidate));
+    if (!existing) {
+        throw createError("FILE_NOT_FOUND", "Default sample data file not found", { candidates });
+    }
+
+    return existing;
+}
+
 export async function importReviews(input: unknown, vectorStore: IVectorStore) {
     const parseResult = ImportToolInputSchema.safeParse(input);
     if (!parseResult.success) {
@@ -23,9 +41,7 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
 
     // Default to the auto-scraped dataset if no source is explicitly provided
     if (!source || (source.type === 'file' && !source.path)) {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        source = { type: 'file', path: path.resolve(__dirname, '../sample_data/scraped_reviews.csv') };
+        source = { type: 'file', path: resolveDefaultSourcePath() };
     }
 
     if (source.type === "file" && !existsSync(source.path)) {

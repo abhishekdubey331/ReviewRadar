@@ -34,3 +34,4 @@
 3. Add short validation evidence in `Notes` (pass/fail + command summary).
 4. If a validation fails, set status to `BLOCKED` and record the failure in `Notes`.
 
+
