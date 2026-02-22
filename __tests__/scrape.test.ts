@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error JavaScript scraper helpers are imported directly for unit coverage.
 import { normalizeReviewDate, toCsvRows } from '../scripts/scrape.js';
 
 describe('scrape helpers', () => {

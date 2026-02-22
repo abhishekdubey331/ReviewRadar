@@ -29,6 +29,10 @@ describe("tool dispatcher", () => {
         } as any;
         const llmClient = { processPrompt: vi.fn() } as any;
 
-        await expect(dispatchToolCall("reviews_unknown", {}, { vectorStore, llmClient })).rejects.toThrow("Tool not found");
+        await expect(dispatchToolCall("reviews_unknown", {}, { vectorStore, llmClient })).rejects.toMatchObject({
+            code: "INVALID_SCHEMA",
+            message: "Tool not found",
+            details: { tool_name: "reviews_unknown" }
+        });
     });
 });
