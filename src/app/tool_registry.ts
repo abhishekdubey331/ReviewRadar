@@ -114,16 +114,6 @@ export const TOOL_DEFINITIONS = [
     }
   },
   {
-    name: "reviews_reply_suggest",
-    description: "Draft a policy-compliant reply to a user review.",
-    inputSchema: {
-      type: "object",
-      properties: { review_text: { type: "string" }, tone: { type: "string" } },
-      required: ["review_text"],
-      additionalProperties: false
-    }
-  },
-  {
     name: "reviews_export",
     description: "Export analyzed reviews into different formats (e.g. Markdown or Jira).",
     inputSchema: {

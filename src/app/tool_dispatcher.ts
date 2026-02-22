@@ -2,7 +2,6 @@ import { importReviews } from "../tools/import.js";
 import { analyzeReviewsTool } from "../tools/analyze.js";
 import { getSafetyAlertsTool } from "../tools/safety_alerts.js";
 import { summarizeTool } from "../tools/summarize.js";
-import { replySuggestTool } from "../tools/reply.js";
 import { exportTool } from "../tools/export.js";
 import { topIssuesTool } from "../tools/top_issues.js";
 import { segmentBreakdownTool } from "../tools/segment_breakdown.js";
@@ -98,7 +97,6 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
     reviews_analyze: ({ args, deps }) => analyzeReviewsTool(args, deps),
     reviews_get_safety_alerts: ({ args, deps }) => getSafetyAlertsTool(args, deps.vectorStore),
     reviews_summarize: ({ args, deps }) => summarizeTool(args, deps.llmClient),
-    reviews_reply_suggest: ({ args, deps }) => replySuggestTool(args, deps.llmClient),
     reviews_export: ({ args }) => exportTool(args),
     reviews_top_issues: ({ args }) => topIssuesTool(args),
     reviews_segment_breakdown: ({ args }) => segmentBreakdownTool(args),

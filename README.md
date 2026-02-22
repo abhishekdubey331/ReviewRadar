@@ -54,7 +54,6 @@ node /absolute/path/to/ReviewRadar/dist/index.js
 - `reviews_analyze`
 - `reviews_get_safety_alerts`
 - `reviews_summarize`
-- `reviews_reply_suggest`
 - `reviews_export`
 - `reviews_top_issues`
 - `reviews_segment_breakdown`
@@ -68,7 +67,6 @@ node /absolute/path/to/ReviewRadar/dist/index.js
 - `reviews_diagnose_runtime`
 
 ## Provider Capability Notes
-- `reviews_analyze`, `reviews_summarize`, `reviews_reply_suggest`: work with either OpenAI or Anthropic key.
 - `reviews_import`, `reviews_search`: require `OPENAI_API_KEY` for embeddings.
 
 ## Storage behavior

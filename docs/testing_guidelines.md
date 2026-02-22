@@ -27,7 +27,7 @@ Code must not be pushed if the tests fail or if the verification steps have not 
     *   Mock 10 consecutive failures. Assert that the Circuit Breaker trips and throws the `CIRCUIT_BREAKER_TRIPPED` error.
 
 ### Milestone 3/4: Summaries, Exports, and Safety
-*   **Output Formats (Commits 11, 12, 13):** Assert that the generated markdown and Jira formats match the expected string templates. Assert that `reviews.reply_suggest` always outputs `needs_human_approval: true`.
+*   **Output Formats (Commits 11, 12, 13):** Assert that the generated markdown and Jira formats match the expected string templates.
 *   **Safety Alerts Fast-Path (Commit 14):** Assert that calling `reviews.get_safety_alerts` returns *only* reviews matching the safety criteria, ignoring all others.
 
 ## 3. Pre-Commit Checklist

@@ -164,11 +164,6 @@ Problem summary, Repro hints, Device/version, Feature mentions.
     *   **IF** (`Issue Type = Safety Concern`) **OR** ((`Feature Area in [Crash Detection, Family Location, SOS]`) **AND** (`Sentiment = Negative`))
     *   **THEN**: Bypass standard weekly aggregation → Push to dedicated `safety_alerts[]` output array → Flag `requires_immediate_attention: true`.
 
-### 6.4 Reply Suggestions (`reviews.reply_suggest`)
-*   **Inputs**: `review_text`, `tone` (optional, e.g., `empathetic_formal`, `casual`).
-*   **Constraints**: Avoid promising refunds, giving timelines, or admitting fault beyond policy.
-*   **Must Include**: Empathy, clear next step, support escalation link placeholder.
-*   **Output Flag**: `needs_human_approval: true`
 
 ### 6.5 Export (`reviews.export`)
 *   Formats: Markdown (Slack-ready), JSON (dashboard-ready), Jira-draft format.

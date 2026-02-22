@@ -454,40 +454,7 @@ All tools return either data or error (never both).
 }
 ```
 
-### 7) reviews.reply_suggest
-```json
-{
-  "$id": "reviews.reply_suggest.schema.json",
-  "type": "object",
-  "properties": {
-    "review_text": { "type": "string", "minLength": 1 },
-    "tone": { "type": "string", "default": "empathetic_formal" }
-  },
-  "required": ["review_text"],
-  "additionalProperties": false
-}
-```
-**Response:**
-```json
-{
-  "type": "object",
-  "properties": {
-    "data": {
-      "type": "object",
-      "properties": {
-        "reply_text": { "type": "string" },
-        "needs_human_approval": { "type": "boolean" }
-      },
-      "required": ["reply_text", "needs_human_approval"],
-      "additionalProperties": false
-    }
-  },
-  "required": ["data"],
-  "additionalProperties": false
-}
-```
-
-### 8) Error response (all tools)
+### 7) Error response (all tools)
 ```json
 {
   "type": "object",
