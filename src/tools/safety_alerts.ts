@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { AnalyzeToolInputSchema } from './analyze.js';
-import { importReviews } from './import.js';
+import { loadReviews } from './import.js';
 import { evaluateRules } from '../engine/rules.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
 
-export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorStore) {
+export async function getSafetyAlertsTool(input: unknown, _vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid analyze parameters", parseResult.error.format());
@@ -14,8 +14,8 @@ export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorSt
 
     const { source, options } = parseResult.data;
     const includeRawText = options?.include_raw_text ?? false;
-    const importRes = await importReviews({ source, options: { max_reviews: 5000 } }, vectorStore);
-    const rawInputReviews = importRes.data.reviews;
+    const loaded = await loadReviews({ source });
+    const rawInputReviews = loaded.reviews;
 
     const startTime = Date.now();
     let filtered_spam = 0;
@@ -47,7 +47,7 @@ export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorSt
         }
     }
 
-    const total_reviews_input = importRes.data.metadata.total_reviews_input;
+    const total_reviews_input = loaded.diagnostics.total_reviews_input;
     const total_processed = total_reviews_input - filtered_spam;
     const spam_ratio = total_reviews_input > 0 ? (filtered_spam / total_reviews_input) : 0;
 

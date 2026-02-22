@@ -42,7 +42,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } catch (error: unknown) {
         const err = error instanceof AppError
             ? error
-            : new AppError("INTERNAL", error instanceof Error ? error.message : "Unknown error");
+            : new AppError("INTERNAL", "Unexpected internal error");
 
         return {
             content: [{ type: "text", text: JSON.stringify({ error: { code: err.code, message: err.message, details: err.details } }) }],

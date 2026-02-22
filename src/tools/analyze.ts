@@ -9,6 +9,7 @@ import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
 import { ILLMClient } from '../domain/ports/llm_client.js';
 import pLimit from 'p-limit';
+import { AnalyzedReviewSchema } from '../schemas/shared.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -118,6 +119,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
 
             const rOutput = {
                 review_id: res.review.review_id,
+                text: includeRawText ? res.review.content : redactPII(res.review.content),
                 issue_type: out.issue_type,
                 feature_area: out.feature_area,
                 severity: out.severity || "FYI",
@@ -133,7 +135,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
                     feature_mentions: []
                 }
             };
-            finalReviews.push(rOutput);
+            finalReviews.push(AnalyzedReviewSchema.parse(rOutput));
 
             if (out.severity === "P0" || out.severity === "P1") {
                 safety_alerts.push({

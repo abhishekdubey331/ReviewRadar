@@ -1,23 +1,24 @@
 import { z } from 'zod';
 import { createError } from '../utils/errors.js';
 import { ILLMClient } from '../domain/ports/llm_client.js';
+import { AnalyzedReviewSchema } from '../schemas/shared.js';
 
 export interface SummarizeReviewInput {
-    text: string;
+    text?: string;
     feature_area: string;
     issue_type: string;
     severity: string;
 }
 
-const SummarizeReviewSchema = z.object({
-    text: z.string().max(10000),
+const LegacySummarizeReviewSchema = z.object({
+    text: z.string().max(10000).optional(),
     feature_area: z.string().min(1).max(100),
     issue_type: z.string().min(1).max(100),
     severity: z.string().min(1).max(20),
 });
 
 const SummarizeToolInputSchema = z.object({
-    reviews: z.array(SummarizeReviewSchema).max(5000)
+    reviews: z.array(z.union([AnalyzedReviewSchema, LegacySummarizeReviewSchema])).max(5000)
 });
 
 export async function summarizeReviews(
@@ -53,7 +54,9 @@ export async function summarizeReviews(
         grouped[r.feature_area][r.issue_type]++;
     }
 
-    const reviewTexts = reviews.map(r => r.text).filter(t => t.trim().length > 0);
+    const reviewTexts = reviews
+        .map(r => r.text ?? "")
+        .filter(t => t.trim().length > 0);
     const prompt = `Based on these reviews, extract the top 3 recurring themes. Return ONLY a JSON array of 3 strings.\n\nReviews:\n${reviewTexts.slice(0, 50).join("\n---\n")}`;
 
     let top_themes: string[] = ["No themes found", "Not enough data", "Unknown"];

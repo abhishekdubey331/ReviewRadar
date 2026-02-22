@@ -48,4 +48,29 @@ describe('reviews.summarize', () => {
             message: "Invalid summarize parameters"
         });
     });
+
+    it('accepts analyzed-review payloads that omit text', async () => {
+        const mockClient = new ConcurrentLLMClient({ apiKey: 'mock' });
+        const input = [{
+            review_id: "r1",
+            issue_type: "Bug",
+            feature_area: "Login/OTP",
+            severity: "P1",
+            sentiment: "Negative",
+            confidence_score: 0.8,
+            classification_source: "hybrid",
+            signals: {
+                summary: "",
+                repro_hints: [],
+                device: "Unknown",
+                os_version: "Unknown",
+                app_version: "Unknown",
+                feature_mentions: []
+            },
+            text: ""
+        }];
+
+        const result = await summarizeTool({ reviews: input }, mockClient as any);
+        expect(result.data.p1_count).toBe(1);
+    });
 });

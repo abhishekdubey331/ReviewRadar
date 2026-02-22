@@ -108,3 +108,22 @@ export const SourceSchema = z.union([
         reviews: z.array(z.lazy(() => ReviewInputSchema)).min(1).max(5000),
     }).strict(),
 ]);
+
+export const AnalyzedReviewSchema = z.object({
+    review_id: z.string(),
+    text: z.string(),
+    issue_type: z.string(),
+    feature_area: z.string(),
+    severity: SeverityEnum,
+    sentiment: SentimentEnum,
+    confidence_score: z.number(),
+    classification_source: ClassificationSourceEnum,
+    signals: z.object({
+        summary: z.string(),
+        repro_hints: z.array(z.string()),
+        device: z.string(),
+        os_version: z.string(),
+        app_version: z.string(),
+        feature_mentions: z.array(z.string())
+    }).strict()
+}).strict();

@@ -30,7 +30,6 @@ try {
 }
 
 export const configSchema = z.object({
-    APP_LINK: z.string().url("APP_LINK must be a valid URL"),
     OPENAI_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
     MAX_BATCH_BUDGET_USD: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid currency amount").default("5.00"),
@@ -44,6 +43,16 @@ export type Config = z.infer<typeof configSchema>;
 
 export function parseConfig(env: NodeJS.ProcessEnv = process.env): Config {
     return configSchema.parse(env);
+}
+
+export const scrapeConfigSchema = z.object({
+    APP_LINK: z.string().url("APP_LINK must be a valid URL")
+}).strict();
+
+export type ScrapeConfig = z.infer<typeof scrapeConfigSchema>;
+
+export function parseScrapeConfig(env: NodeJS.ProcessEnv = process.env): ScrapeConfig {
+    return scrapeConfigSchema.parse(env);
 }
 
 export function getConfigDiagnostics() {

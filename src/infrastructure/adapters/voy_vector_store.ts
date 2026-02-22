@@ -7,20 +7,6 @@ import pLimit from "p-limit";
 import retry from "async-retry";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 
-function formatProviderError(error: any): string {
-    if (!error) return "unknown error";
-    const status = error.status ? `status=${error.status}` : null;
-    const code = error.code ? `code=${error.code}` : null;
-    const type = error.type ? `type=${error.type}` : null;
-    const message = error.message || "request failed";
-    const stack = error.stack ? `\nStack: ${error.stack}` : "";
-    const cause = error.cause ? `\nCause: ${error.cause.message || error.cause}` : "";
-
-    const parts = [status, code, type].filter(Boolean).join(", ");
-    const detailedMessage = parts ? `${message} (${parts})` : message;
-    return `${detailedMessage}${cause}${stack}`;
-}
-
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
     private openai: OpenAI | null = null;
@@ -243,7 +229,7 @@ export class VoyVectorStore implements IVectorStore {
             return processedInThisRun;
         } catch (error: any) {
             console.error("Indexing Process Failed:", error);
-            throw createError("INTERNAL", `Failed to index reviews: ${formatProviderError(error)}`);
+            throw createError("INTERNAL", "Failed to index reviews");
         }
     }
 
@@ -315,7 +301,7 @@ export class VoyVectorStore implements IVectorStore {
             return filteredResults.slice(0, limit);
         } catch (error: any) {
             console.error("Search Failed:", error);
-            throw createError("INTERNAL", `Failed to search: ${formatProviderError(error)}`);
+            throw createError("INTERNAL", "Failed to search reviews");
         }
     }
 

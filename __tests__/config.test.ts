@@ -1,45 +1,56 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-import { configSchema, parseConfig, isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics, resolveStorageDir } from '../src/utils/config.js';
+import { configSchema, parseConfig, parseScrapeConfig, isPlayStoreLink, isAppStoreLink, extractAppId, getConfigDiagnostics, resolveStorageDir } from '../src/utils/config.js';
 import path from 'path';
 
 describe('Configuration Validation', () => {
 
-    it('should validate a valid Play Store URL and API key', () => {
+    it('should validate runtime config with OpenAI key', () => {
         const result = configSchema.safeParse({
-            APP_LINK: 'https://play.google.com/store/apps/details?id=com.whatsapp',
             OPENAI_API_KEY: 'sk-123'
         });
         expect(result.success).toBe(true);
     });
 
-    it('should validate a valid App Store URL and Anthropic API key', () => {
+    it('should validate runtime config with Anthropic key', () => {
         const result = configSchema.safeParse({
-            APP_LINK: 'https://apps.apple.com/us/app/whatsapp/id310633997',
             ANTHROPIC_API_KEY: 'sk-ant-123'
         });
         expect(result.success).toBe(true);
     });
 
     it('should fail if no API key is provided', () => {
-        const result = configSchema.safeParse({
-            APP_LINK: 'https://play.google.com/store/apps/details?id=com.whatsapp'
-        });
+        const result = configSchema.safeParse({});
         expect(result.success).toBe(false);
     });
 
-    it('should fail if APP_LINK is missing or invalid', () => {
+    it('parseScrapeConfig validates APP_LINK separately for scraper flows', () => {
+        const result = parseScrapeConfig({
+            APP_LINK: 'https://play.google.com/store/apps/details?id=com.whatsapp'
+        } as NodeJS.ProcessEnv);
+        expect(result.APP_LINK).toContain('play.google.com');
+    });
+
+    it('parseScrapeConfig fails with invalid APP_LINK', () => {
+        expect(() => parseScrapeConfig({ APP_LINK: 'not-a-url' } as NodeJS.ProcessEnv)).toThrow(z.ZodError);
+    });
+
+    it('parseConfig throws zod error for missing runtime keys', () => {
+        expect(() => parseConfig({} as NodeJS.ProcessEnv)).toThrow(z.ZodError);
+    });
+
+    it('runtime parseConfig does not require APP_LINK', () => {
+        const result = parseConfig({ OPENAI_API_KEY: 'sk-123' } as NodeJS.ProcessEnv);
+        expect(result.OPENAI_API_KEY).toBe('sk-123');
+    });
+
+    it('runtime config rejects invalid budget format', () => {
         const result = configSchema.safeParse({
             OPENAI_API_KEY: 'sk-123',
-            APP_LINK: 'not-a-url'
+            MAX_BATCH_BUDGET_USD: 'abc'
         });
         expect(result.success).toBe(false);
     });
-
-    it('parseConfig throws zod error for invalid env', () => {
-        expect(() => parseConfig({ APP_LINK: 'invalid-url' } as NodeJS.ProcessEnv)).toThrow(z.ZodError);
-    });
-
 });
 
 describe('App ID Extraction', () => {

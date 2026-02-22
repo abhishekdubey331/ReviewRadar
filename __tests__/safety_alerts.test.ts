@@ -35,6 +35,7 @@ describe('reviews.get_safety_alerts tool', () => {
         } as any;
 
         const result = await getSafetyAlertsTool(input, mockVectorStore);
+        expect(mockVectorStore.indexReviews).not.toHaveBeenCalled();
 
         expect(result.data).toBeDefined();
         expect(result.data.metadata).toBeDefined();
@@ -84,6 +85,7 @@ describe('reviews.get_safety_alerts tool', () => {
         } as any;
 
         const result = await getSafetyAlertsTool(input, mockVectorStore);
+        expect(mockVectorStore.indexReviews).not.toHaveBeenCalled();
         expect(result.data.safety_alerts[0].text).toContain("john@example.com");
     });
 });
