@@ -5,6 +5,7 @@ import path from "path";
 import pLimit from "p-limit";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 import { EmbeddingClient, OpenAIEmbeddingClient } from "./openai_embedding_client.js";
+import { loadPersistedMetadata, loadVoyIndex, saveVoyState } from "./voy_persistence.js";
 
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
@@ -16,15 +17,13 @@ export class VoyVectorStore implements IVectorStore {
     private readonly storageDir: string;
     private readonly indexFile: string;
     private readonly metadataFile: string;
-    private readonly embeddingApiKey?: string;
 
     constructor(options?: { storageDir?: string; embeddingApiKey?: string; embeddingClient?: EmbeddingClient }) {
         this.storageDir = options?.storageDir ?? path.resolve(process.cwd(), "storage");
         this.indexFile = path.join(this.storageDir, "vector_index.json");
         this.metadataFile = path.join(this.storageDir, "metadata.json");
-        this.embeddingApiKey = options?.embeddingApiKey;
         this.embeddingClient = options?.embeddingClient ?? new OpenAIEmbeddingClient({
-            apiKey: this.embeddingApiKey,
+            apiKey: options?.embeddingApiKey,
             dimensions: this.embeddingDimensions,
             model: "text-embedding-3-small"
         });
@@ -32,29 +31,21 @@ export class VoyVectorStore implements IVectorStore {
 
     private async ensureInitialized() {
         if (!this.voy) {
-            if (fs.existsSync(this.indexFile)) {
-                try {
-                    const serialized = fs.readFileSync(this.indexFile, "utf8");
-                    this.voy = Voy.deserialize(serialized);
-                    this.isInitialized = true;
+            try {
+                this.voy = loadVoyIndex(this.indexFile) ?? new Voy();
+                this.isInitialized = fs.existsSync(this.indexFile);
+                if (this.isInitialized) {
                     console.error("Loaded persistent vector index from disk.");
-                } catch (e) {
-                    console.error("Failed to load persistent index, creating new one:", e);
-                    this.voy = new Voy();
                 }
-            } else {
+            } catch (e) {
+                console.error("Failed to load persistent index, creating new one:", e);
                 this.voy = new Voy();
             }
         }
 
         if (this.indexedMetadata.size === 0 && fs.existsSync(this.metadataFile)) {
             try {
-                const meta = JSON.parse(fs.readFileSync(this.metadataFile, "utf8"));
-                if (meta.reviews && typeof meta.reviews === "object") {
-                    this.indexedMetadata = new Map(Object.entries(meta.reviews));
-                } else if (Array.isArray(meta.indexed_ids)) {
-                    this.indexedMetadata = new Map(meta.indexed_ids.map((id: string) => [id, { id }]));
-                }
+                this.indexedMetadata = loadPersistedMetadata(this.metadataFile);
             } catch (e) {
                 console.error("Failed to load metadata:", e);
             }
@@ -64,17 +55,15 @@ export class VoyVectorStore implements IVectorStore {
     private async save() {
         if (!this.voy) return;
         try {
-            if (!fs.existsSync(this.storageDir)) {
-                fs.mkdirSync(this.storageDir, { recursive: true });
-            }
-            const serialized = this.voy.serialize();
-            fs.writeFileSync(this.indexFile, serialized, "utf8");
-
-            const metadataToSave = {
-                reviews: Object.fromEntries(this.indexedMetadata),
-                updated_at: new Date().toISOString()
-            };
-            fs.writeFileSync(this.metadataFile, JSON.stringify(metadataToSave, null, 2), "utf8");
+            saveVoyState(
+                {
+                    storageDir: this.storageDir,
+                    indexFile: this.indexFile,
+                    metadataFile: this.metadataFile
+                },
+                this.voy,
+                this.indexedMetadata
+            );
 
             console.error(`Vector index and metadata (${this.indexedMetadata.size} reviews) saved to disk.`);
         } catch (e) {
