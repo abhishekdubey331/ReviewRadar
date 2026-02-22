@@ -13,17 +13,6 @@ vi.mock('../src/tools/import.js', () => ({
     })
 }));
 
-vi.mock('../src/engine/llmClient.js', () => {
-    return {
-        ConcurrentLLMClient: vi.fn().mockImplementation(() => ({
-            processPrompt: vi.fn().mockResolvedValue({
-                content: [{ type: "text", text: '{"issue_type": "Bug", "feature_area": "Crash Detection", "severity": "P0"}' }],
-                usage: { input_tokens: 10, output_tokens: 10 }
-            })
-        }))
-    };
-});
-
 describe('Analyze Tool', () => {
     it('analyzes reviews, calculates metadata math correctly, and routes to LLM', async () => {
         const input = {
@@ -39,7 +28,14 @@ describe('Analyze Tool', () => {
             getStorageDiagnostics: vi.fn()
         } as any;
 
-        const result: any = await analyzeReviewsTool(input, mockVectorStore);
+        const mockLlmClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: '{"issue_type": "Bug", "feature_area": "Crash Detection", "severity": "P0"}' }],
+                usage: { input_tokens: 10, output_tokens: 10 }
+            })
+        } as any;
+
+        const result: any = await analyzeReviewsTool(input, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
 
         // Expect 2 reviews to have been processed
         expect(result.data.metadata.total_processed).toBe(2);
@@ -73,8 +69,15 @@ describe('Analyze Tool', () => {
             getStorageDiagnostics: vi.fn()
         } as any;
 
-        const first: any = await analyzeReviewsTool(input, mockVectorStore);
-        const second: any = await analyzeReviewsTool(input, mockVectorStore);
+        const mockLlmClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: '{"issue_type": "Bug", "feature_area": "Crash Detection", "severity": "P0"}' }],
+                usage: { input_tokens: 10, output_tokens: 10 }
+            })
+        } as any;
+
+        const first: any = await analyzeReviewsTool(input, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
+        const second: any = await analyzeReviewsTool(input, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
 
         expect(first.data.metadata.cost_estimate_usd).toBeGreaterThan(0);
         expect(second.data.metadata.cost_estimate_usd).toBe(first.data.metadata.cost_estimate_usd);

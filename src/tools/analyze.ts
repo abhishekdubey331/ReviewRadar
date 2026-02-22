@@ -3,11 +3,11 @@ import { SourceSchema } from '../schemas/shared.js';
 import { importReviews } from './import.js';
 import { evaluateRules } from '../engine/rules.js';
 import { isLlmRequired } from '../engine/routing.js';
-import { ConcurrentLLMClient } from '../engine/llmClient.js';
 import { CircuitBreaker } from '../engine/circuitBreaker.js';
 import { redactPII } from '../utils/redact.js';
 import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
+import { ILLMClient } from '../domain/ports/llm_client.js';
 import pLimit from 'p-limit';
 
 export const AnalyzeOptionsSchema = z.object({
@@ -23,19 +23,21 @@ export const AnalyzeToolInputSchema = z.object({
     options: AnalyzeOptionsSchema.optional(),
 });
 
-export async function analyzeReviewsTool(input: unknown, vectorStore: IVectorStore) {
+export interface AnalyzeDeps {
+    vectorStore: IVectorStore;
+    llmClient: ILLMClient;
+}
+
+export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid analyze parameters", parseResult.error.format());
     }
 
     const { source, options } = parseResult.data;
-    const importRes = await importReviews({ source, options: { max_reviews: 20000 } }, vectorStore);
+    const { vectorStore, llmClient } = deps;
+    const importRes = await importReviews({ source }, vectorStore);
     const rawInputReviews = importRes.data.reviews;
-    const llmClient = new ConcurrentLLMClient({
-        apiKey: process.env.ANTHROPIC_API_KEY || 'MOCK_KEY',
-        concurrency: options?.concurrency
-    });
 
     const startTime = Date.now();
     const cb = new CircuitBreaker();

@@ -35,7 +35,7 @@ export async function dispatchToolCall(name: string, args: any, deps: Dispatcher
             return asTextResponse({ data: sanitizedData });
         }
         case "reviews_analyze":
-            return asTextResponse(await analyzeReviewsTool(args, vectorStore));
+            return asTextResponse(await analyzeReviewsTool(args, { vectorStore, llmClient }));
         case "reviews_get_safety_alerts":
             return asTextResponse(await getSafetyAlertsTool(args, vectorStore));
         case "reviews_summarize":
