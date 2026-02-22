@@ -6,7 +6,7 @@ import { ILLMClient, LLMResponse } from '../domain/ports/llm_client.js';
 import { getConfig } from '../utils/config.js';
 
 export interface LLMClientOptions {
-    apiKey: string;
+    apiKey?: string;
     concurrency?: number;
 }
 
@@ -27,9 +27,11 @@ export class ConcurrentLLMClient implements ILLMClient {
         } else if (envConfig.ANTHROPIC_API_KEY) {
             this.provider = 'anthropic';
             this.anthropic = new Anthropic({ apiKey: envConfig.ANTHROPIC_API_KEY });
+        } else if (options?.apiKey) {
+            this.provider = 'anthropic';
+            this.anthropic = new Anthropic({ apiKey: options.apiKey });
         } else {
-            // Fallback to options or dummy
-            this.anthropic = new Anthropic({ apiKey: options?.apiKey || 'DUMMY_KEY' });
+            throw new Error('No LLM provider configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.');
         }
     }
 

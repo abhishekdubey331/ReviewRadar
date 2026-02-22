@@ -8,8 +8,16 @@ import { TOOL_DEFINITIONS } from "./app/tool_registry.js";
 import { dispatchToolCall } from "./app/tool_dispatcher.js";
 import { AppError } from "./utils/errors.js";
 
-const vectorStore = new VoyVectorStore();
-const llmClient = new ConcurrentLLMClient({ apiKey: process.env.ANTHROPIC_API_KEY || "MOCK_KEY", concurrency: 10 });
+function buildRuntimeDeps() {
+    // Validate configuration once at the composition root before creating dependencies.
+    getConfig();
+    return {
+        vectorStore: new VoyVectorStore(),
+        llmClient: new ConcurrentLLMClient({ concurrency: 10 })
+    };
+}
+
+const { vectorStore, llmClient } = buildRuntimeDeps();
 
 const server = new Server(
     {
@@ -43,7 +51,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
-    getConfig();
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("Greenlight App Reviews MCP Server running on stdio");
