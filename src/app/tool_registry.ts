@@ -1,3 +1,67 @@
+const SourceSchema = {
+  oneOf: [
+    {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["file"] },
+        path: { type: "string", minLength: 1 }
+      },
+      required: ["type", "path"],
+      additionalProperties: false
+    },
+    {
+      type: "object",
+      properties: {
+        type: { type: "string", enum: ["inline"] },
+        reviews: {
+          type: "array",
+          minItems: 1,
+          maxItems: 5000,
+          items: { type: "object" }
+        }
+      },
+      required: ["type", "reviews"],
+      additionalProperties: false
+    }
+  ]
+} as const;
+
+const AnalyzeOptionsSchema = {
+  type: "object",
+  properties: {
+    budget_usd: { type: "number" },
+    concurrency: { type: "number", minimum: 1, maximum: 20 },
+    routing_model: { type: "string" },
+    summary_model: { type: "string" },
+    include_summary: { type: "boolean" },
+    include_raw_text: { type: "boolean" }
+  },
+  additionalProperties: false
+} as const;
+
+const ExportReviewSchema = {
+  type: "object",
+  properties: {
+    review_id: { type: "string" },
+    issue_type: { type: "string" },
+    feature_area: { type: "string" },
+    severity: { type: "string", enum: ["P0", "P1", "P2", "FYI"] },
+    sentiment: { type: "string", enum: ["Positive", "Mixed", "Neutral", "Negative"] },
+    signals: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        device: { type: "string" },
+        os_version: { type: "string" },
+        app_version: { type: "string" }
+      },
+      additionalProperties: false
+    }
+  },
+  required: ["review_id", "issue_type", "feature_area", "severity", "sentiment"],
+  additionalProperties: false
+} as const;
+
 export const TOOL_DEFINITIONS = [
   {
     name: "reviews_import",
@@ -5,8 +69,12 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: {
-        source: { type: "object", description: "Optional source override. If omitted, uses sample_data/scraped_reviews.csv." }
-      }
+        source: {
+          ...SourceSchema,
+          description: "Optional source override. If omitted, uses sample_data/scraped_reviews.csv."
+        }
+      },
+      additionalProperties: false
     }
   },
   {
@@ -14,8 +82,12 @@ export const TOOL_DEFINITIONS = [
     description: "Analyze reviews using hybrid deterministic rules and LLM routing.",
     inputSchema: {
       type: "object",
-      properties: { source: { type: "object" }, options: { type: "object" } },
-      required: ["source"]
+      properties: {
+        source: SourceSchema,
+        options: AnalyzeOptionsSchema
+      },
+      required: ["source"],
+      additionalProperties: false
     }
   },
   {
@@ -23,8 +95,12 @@ export const TOOL_DEFINITIONS = [
     description: "Fast-path tool to get only P0 and P1 safety alerts.",
     inputSchema: {
       type: "object",
-      properties: { source: { type: "object" }, options: { type: "object" } },
-      required: ["source"]
+      properties: {
+        source: SourceSchema,
+        options: AnalyzeOptionsSchema
+      },
+      required: ["source"],
+      additionalProperties: false
     }
   },
   {
@@ -33,7 +109,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } } },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -42,7 +119,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { review_text: { type: "string" }, tone: { type: "string" } },
-      required: ["review_text"]
+      required: ["review_text"],
+      additionalProperties: false
     }
   },
   {
@@ -50,8 +128,12 @@ export const TOOL_DEFINITIONS = [
     description: "Export analyzed reviews into different formats (e.g. Markdown or Jira).",
     inputSchema: {
       type: "object",
-      properties: { format: { type: "string", enum: ["markdown", "jira"] }, reviews: { type: "array", items: { type: "object" } } },
-      required: ["format", "reviews"]
+      properties: {
+        format: { type: "string", enum: ["markdown", "jira"] },
+        reviews: { type: "array", maxItems: 5000, items: ExportReviewSchema }
+      },
+      required: ["format", "reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -60,7 +142,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } }, options: { type: "object" } },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -69,7 +152,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } }, options: { type: "object" } },
-      required: ["reviews", "options"]
+      required: ["reviews", "options"],
+      additionalProperties: false
     }
   },
   {
@@ -78,7 +162,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } }, options: { type: "object" } },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -91,7 +176,8 @@ export const TOOL_DEFINITIONS = [
         current_reviews: { type: "array", items: { type: "object" } },
         options: { type: "object" }
       },
-      required: ["baseline_reviews", "current_reviews"]
+      required: ["baseline_reviews", "current_reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -100,7 +186,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } }, options: { type: "object" } },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -109,7 +196,8 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: "object",
       properties: { reviews: { type: "array", items: { type: "object" } }, options: { type: "object" } },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -122,7 +210,8 @@ export const TOOL_DEFINITIONS = [
         ownership_rules: { type: "array", items: { type: "object" } },
         options: { type: "object" }
       },
-      required: ["reviews", "ownership_rules"]
+      required: ["reviews", "ownership_rules"],
+      additionalProperties: false
     }
   },
   {
@@ -135,7 +224,8 @@ export const TOOL_DEFINITIONS = [
         ownership_rules: { type: "array", items: { type: "object" } },
         options: { type: "object" }
       },
-      required: ["reviews"]
+      required: ["reviews"],
+      additionalProperties: false
     }
   },
   {
@@ -153,17 +243,18 @@ export const TOOL_DEFINITIONS = [
         sort_by: { type: "string", enum: ["relevance", "date"], default: "relevance", description: "Sort by semantic relevance or recency" },
         sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc", description: "Chronological sort order: 'desc' for newest first, 'asc' for oldest first." }
       },
-      required: []
+      required: [],
+      additionalProperties: false
     }
   },
   {
     name: "reviews_get_index_status",
     description: "Get diagnostic information about the vector database, including metadata health and record counts.",
-    inputSchema: { type: "object", properties: {} }
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
   },
   {
     name: "reviews_diagnose_runtime",
     description: "Get runtime diagnostics for env loading and index storage paths (keys are masked).",
-    inputSchema: { type: "object", properties: {} }
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }
 ] as const;
