@@ -1,6 +1,6 @@
 # 📄 Product Requirements Document
-**Product:** Greenlight App Review Intelligence MCP Server  
-**Owner:** Abhishek Dubey  
+**Product:** Greenlight App Review Intelligence MCP Server
+**Owner:** Abhishek Dubey
 **Version:** v1.0 *(Implementation Contract Ready)*
 
 ## 1. Problem Statement
@@ -46,7 +46,7 @@ This will be implemented as an **MCP server**, making it a stateless, modular in
 *   Real-time streaming analysis.
 *   Fully automated reply publishing.
 *   Sentiment/ML model fine-tuning.
-*   **Historical Data Storage**: v1 is strictly stateless. 
+*   **Historical Data Storage**: v1 is strictly stateless.
 *   **Cross-Version Comparison**: Focus is on point-in-time analysis to nail taxonomy.
 
 ## 4. Target Users
@@ -126,19 +126,19 @@ Crash Detection | Driving Reports | Family Location | SOS | Card Controls | Allo
 
 *Severity Evaluation Order (highest wins, stop at first match)*
 
-*   **P0 — Critical (Global)**: 
+*   **P0 — Critical (Global)**:
     *   IF review text contains any `CRITICAL_PHRASES`
     *   OR IF rating ≤ 2 AND text contains `["scam", "fraud", "stole", "unauthorized"]`
     *   *(Overrides LLM; deterministic)*
-*   **P0 — Safety Failure**: 
-    *   IF (`issue_type` == Safety Concern) 
-    *   OR ((`feature_area` ∈ `[Crash Detection, Family Location, SOS]`) AND (`sentiment` == Negative)) 
-    *   AND (text contains any `SAFETY_FAILURE_PHRASES` OR text contains `["not working", "stopped", "fails", "failed", "broken"]` with a safety feature mention). 
+*   **P0 — Safety Failure**:
+    *   IF (`issue_type` == Safety Concern)
+    *   OR ((`feature_area` ∈ `[Crash Detection, Family Location, SOS]`) AND (`sentiment` == Negative))
+    *   AND (text contains any `SAFETY_FAILURE_PHRASES` OR text contains `["not working", "stopped", "fails", "failed", "broken"]` with a safety feature mention).
     *   *(Overrides LLM; deterministic)*
-*   **P1 — Major**: 
+*   **P1 — Major**:
     *   IF `issue_type` == Bug AND `sentiment` == Negative AND rating ≤ 3
     *   OR IF `issue_type` == Performance AND text contains `["crash", "freeze", "lag", "hang"]` AND rating ≤ 3.
-*   **P2 — Minor**: 
+*   **P2 — Minor**:
     *   IF `issue_type` == UX
     *   OR IF rating == 4 AND `sentiment` == Mixed
     *   OR minor functional annoyance without critical phrases.

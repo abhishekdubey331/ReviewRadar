@@ -9,11 +9,12 @@
     "start": "node --experimental-wasm-modules dist/index.js",
     "start:all": "npm run scrape && npm run start",
     "build": "tsup",
-    "lint": "tsc --noEmit",
+    "lint:md": "node scripts/lint_markdown.js",
+    "lint": "tsc --noEmit && npm run lint:md",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "verify": "tsc --noEmit && vitest run --coverage"
+    "verify": "npm run lint && vitest run --coverage"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

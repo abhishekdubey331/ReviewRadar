@@ -7,7 +7,7 @@
 4. [x] [P1] Introduce structured logger and remove raw `console.*` in core runtime paths.
 5. [~] [P1] Refactor `analyze` into modular typed units.
 6. [x] [P1] Fix docs/runbook drift (invalid commands/paths and encoding corruption in README).
-7. [~] [P1] Raise OSS quality gates (linting, stronger coverage thresholds, contract tests, release policy).
+7. [x] [P1] Raise OSS quality gates (linting, stronger coverage thresholds, contract tests, release policy).
 8. [ ] [P2] Add reliability hardening (timeouts budgets, explicit retry policy, degraded-mode metadata).
 
 ## Execution Tracker
@@ -20,6 +20,8 @@
 - Done: `8032b1f` extracted Voy persistence module for index/metadata load/save (`src/infrastructure/adapters/voy_persistence.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `fc8ea51` extracted vector search/filter/sort service from `VoyVectorStore` (`src/infrastructure/adapters/voy_search_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `c902999` strengthened quality gates (coverage thresholds, tool registry contract tests, release checklist) (`vitest.config.ts`, `__tests__/tool_registry_contract.test.ts`, `docs/release_checklist.md`, `CONTRIBUTING.md`).
+- Done: `12d21be` extracted indexing service and migrated `VoyVectorStore` logs to structured logger (`src/infrastructure/adapters/voy_indexing_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
+- Done: `(pending commit)` added markdown lint gate and wired lint into `verify` (`scripts/lint_markdown.js`, `package.json`).
 - Done: `12d21be` extracted indexing service and migrated vector-store logs to structured logger (`src/infrastructure/adapters/voy_indexing_service.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `3504052` tool registry schema tightening for `source`, `options`, and export payload shapes (`src/app/tool_registry.ts`).
 - Done: `VoyVectorStore` decomposition baseline (embedding/persistence/search/indexing services extracted; env coupling removed).
@@ -362,3 +364,4 @@ src/
 - Executed: `npm run verify`
 - Result: pass (`27` test files, `95` tests).
 - Current residual risk despite green tests: several P0 items are contract/docs/module-boundary quality issues not fully covered by existing tests.
+

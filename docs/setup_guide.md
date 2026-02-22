@@ -52,7 +52,7 @@ To actually test your code and MCP tools, you must "install" your local server i
 4. Set the Type to: `command`.
 5. Name it: `ReviewRadar-Dev`.
 6. Command: `node /absolute/path/to/ReviewRadar/dist/index.js`
-7. Click Save. 
+7. Click Save.
 
 You can now open a Cursor Chat window and type: *"Can you use the reviews_analyze tool to check this fake review: 'The app crashes when I open my location sharing'?"*
 
