@@ -1,15 +1,14 @@
 import { Voy, EmbeddedResource } from "voy-search/voy_search.js";
-import OpenAI from "openai";
 import { createError } from "../../utils/errors.js";
 import fs from "fs";
 import path from "path";
 import pLimit from "p-limit";
-import retry from "async-retry";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
+import { EmbeddingClient, OpenAIEmbeddingClient } from "./openai_embedding_client.js";
 
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
-    private openai: OpenAI | null = null;
+    private readonly embeddingClient: EmbeddingClient;
     private isInitialized = false;
     private indexedMetadata: Map<string, any> = new Map();
     private readonly embeddingDimensions = 512;
@@ -19,40 +18,16 @@ export class VoyVectorStore implements IVectorStore {
     private readonly metadataFile: string;
     private readonly embeddingApiKey?: string;
 
-    constructor(options?: { storageDir?: string; embeddingApiKey?: string }) {
+    constructor(options?: { storageDir?: string; embeddingApiKey?: string; embeddingClient?: EmbeddingClient }) {
         this.storageDir = options?.storageDir ?? path.resolve(process.cwd(), "storage");
         this.indexFile = path.join(this.storageDir, "vector_index.json");
         this.metadataFile = path.join(this.storageDir, "metadata.json");
         this.embeddingApiKey = options?.embeddingApiKey;
-    }
-
-    private getOpenAI(): OpenAI {
-        const apiKey = this.embeddingApiKey;
-        if (!apiKey || apiKey === "dummy-key" || apiKey.includes("your-openai-api-key")) {
-            throw createError("INTERNAL", "OPENAI_API_KEY not found or is invalid. Vector indexing requires a valid API key in the .env file.");
-        }
-        if (!this.openai) {
-            this.openai = new OpenAI({ apiKey });
-        }
-        return this.openai;
-    }
-
-    private async createEmbeddings(input: string[] | string) {
-        return retry(
-            async () => {
-                return this.getOpenAI().embeddings.create({
-                    model: "text-embedding-3-small",
-                    input,
-                    dimensions: this.embeddingDimensions,
-                });
-            },
-            {
-                retries: 4,
-                factor: 2,
-                minTimeout: 1000,
-                maxTimeout: 10000,
-            }
-        );
+        this.embeddingClient = options?.embeddingClient ?? new OpenAIEmbeddingClient({
+            apiKey: this.embeddingApiKey,
+            dimensions: this.embeddingDimensions,
+            model: "text-embedding-3-small"
+        });
     }
 
     private async ensureInitialized() {
@@ -173,8 +148,7 @@ export class VoyVectorStore implements IVectorStore {
                     const texts = reviewChunk.map(r => r.content);
 
                     tasks.push(concurrencyLimit(async () => {
-                        const response = await this.createEmbeddings(texts);
-                        const embeddings = response.data.map(d => d.embedding);
+                        const embeddings = await this.embeddingClient.embed(texts);
 
                         return reviewChunk
                             .map((r, idx) => ({
@@ -247,8 +221,8 @@ export class VoyVectorStore implements IVectorStore {
             let filteredResults = [];
 
             if (query && query !== "*" && query.trim() !== "") {
-                const response = await this.createEmbeddings(query);
-                const queryEmbedding = new Float32Array(response.data[0].embedding);
+                const embeddings = await this.embeddingClient.embed(query);
+                const queryEmbedding = new Float32Array(embeddings[0]);
 
                 const hasFilters = min_score !== undefined || max_score !== undefined || start_date || end_date || sort_by === "date";
                 const candidateLimit = hasFilters ? 5000 : limit * 2;
