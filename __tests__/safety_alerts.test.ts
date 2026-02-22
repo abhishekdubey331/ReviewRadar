@@ -14,7 +14,7 @@ describe('reviews.get_safety_alerts tool', () => {
                     },
                     {
                         review_id: "2",
-                        content: "SOS not working, could not send emergency alert!",
+                        content: "SOS not working, email me at john@example.com",
                         score: 1
                     },
                     {
@@ -52,6 +52,8 @@ describe('reviews.get_safety_alerts tool', () => {
         expect(review2Alert).toBeDefined();
         expect(review2Alert.severity).toBe("P0");
         expect(review2Alert.requires_immediate_attention).toBe(true);
+        expect(review2Alert.text).toContain("[REDACTED]");
+        expect(review2Alert.text).not.toContain("john@example.com");
 
         const review3Alert = result.data.safety_alerts.find((a: any) => a.review_id === "3");
         expect(review3Alert).toBeDefined();
@@ -60,5 +62,28 @@ describe('reviews.get_safety_alerts tool', () => {
 
         // It should NOT contain the `reviews` array payload
         expect((result.data as any).reviews).toBeUndefined();
+    });
+
+    it('returns raw text only when include_raw_text is enabled', async () => {
+        const input = {
+            source: {
+                type: 'inline',
+                reviews: [
+                    { review_id: "2", content: "SOS not working, email me at john@example.com", score: 1 }
+                ]
+            },
+            options: { include_raw_text: true }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const result = await getSafetyAlertsTool(input, mockVectorStore);
+        expect(result.data.safety_alerts[0].text).toContain("john@example.com");
     });
 });

@@ -4,7 +4,7 @@ import { analyzeReviewsTool } from '../src/tools/analyze.js';
 vi.mock('../src/tools/import.js', () => ({
     loadReviews: vi.fn().mockResolvedValue({
         reviews: [
-            { review_id: 'r1', content: 'app keeps crashing always', score: 1 },
+            { review_id: 'r1', content: 'app keeps crashing contact me at jane@example.com', score: 1 },
             { review_id: 'r2', content: 'this is a good app for card controls!', score: 5 }
         ],
         diagnostics: {
@@ -54,6 +54,8 @@ describe('Analyze Tool', () => {
         // P0 safety alerts should be captured
         expect(result.data.safety_alerts.length).toBe(1);
         expect(result.data.safety_alerts[0].review_id).toBe('r1');
+        expect(result.data.safety_alerts[0].text).not.toContain('jane@example.com');
+        expect(result.data.safety_alerts[0].text).toContain('[REDACTED]');
 
         // Cost estimate should be > 0 due to 1 LLM request
         expect(result.data.metadata.cost_estimate_usd).toBeGreaterThan(0);
@@ -61,7 +63,7 @@ describe('Analyze Tool', () => {
 
     it('does not leak circuit-breaker metrics across separate analyze calls', async () => {
         const input = {
-            source: { type: "inline", reviews: [{ review_id: 'r1', content: 'app keeps crashing', score: 1 }, { review_id: 'r2', content: 'good app', score: 5 }] },
+            source: { type: "inline", reviews: [{ review_id: 'r1', content: 'app keeps crashing contact me at jane@example.com', score: 1 }, { review_id: 'r2', content: 'good app', score: 5 }] },
             options: { concurrency: 1 }
         };
 

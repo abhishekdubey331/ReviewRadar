@@ -13,6 +13,7 @@ export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorSt
     }
 
     const { source, options } = parseResult.data;
+    const includeRawText = options?.include_raw_text ?? false;
     const importRes = await importReviews({ source, options: { max_reviews: 5000 } }, vectorStore);
     const rawInputReviews = importRes.data.reviews;
 
@@ -38,7 +39,7 @@ export async function getSafetyAlertsTool(input: unknown, vectorStore: IVectorSt
             // "related to safety": we can filter by issue_type === 'Safety Concern' or just severity since it's safety_alerts criteria
             safety_alerts.push({
                 review_id: review.review_id,
-                text: review.content,
+                text: includeRawText ? review.content : redacted,
                 feature_area: out.feature_area,
                 severity: out.severity,
                 requires_immediate_attention: (out.severity === "P0")

@@ -16,6 +16,7 @@ export const AnalyzeOptionsSchema = z.object({
     routing_model: z.string().optional(),
     summary_model: z.string().optional(),
     include_summary: z.boolean().default(false).optional(),
+    include_raw_text: z.boolean().default(false).optional(),
 });
 
 export const AnalyzeToolInputSchema = z.object({
@@ -35,6 +36,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     }
 
     const { source, options } = parseResult.data;
+    const includeRawText = options?.include_raw_text ?? false;
     const { llmClient } = deps;
     const loaded = await loadReviews({ source });
     const rawInputReviews = loaded.reviews;
@@ -136,7 +138,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
             if (out.severity === "P0" || out.severity === "P1") {
                 safety_alerts.push({
                     review_id: res.review.review_id,
-                    text: res.review.content,
+                    text: includeRawText ? res.review.content : redactPII(res.review.content),
                     feature_area: out.feature_area,
                     severity: out.severity,
                     requires_immediate_attention: (out.severity === "P0")
