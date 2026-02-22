@@ -6,6 +6,7 @@ import pLimit from "p-limit";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 import { EmbeddingClient, OpenAIEmbeddingClient } from "./openai_embedding_client.js";
 import { loadPersistedMetadata, loadVoyIndex, saveVoyState } from "./voy_persistence.js";
+import { buildMetadataOnlyRecords, buildSemanticSearchRecords, finalizeSearchResults } from "./voy_search_service.js";
 
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
@@ -200,7 +201,7 @@ export class VoyVectorStore implements IVectorStore {
 
     async search(query: string, options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
         await this.ensureInitialized();
-        const { limit = 5, min_score, max_score, start_date, end_date, sort_by = "relevance", sort_direction = "desc" } = options;
+        const { limit = 5, sort_by = "relevance" } = options;
 
         if (!this.isInitialized || !this.voy) {
             throw createError("INTERNAL", "Vector store not initialized. Please import reviews first.");
@@ -213,57 +214,20 @@ export class VoyVectorStore implements IVectorStore {
                 const embeddings = await this.embeddingClient.embed(query);
                 const queryEmbedding = new Float32Array(embeddings[0]);
 
-                const hasFilters = min_score !== undefined || max_score !== undefined || start_date || end_date || sort_by === "date";
+                const hasFilters =
+                    options.min_score !== undefined
+                    || options.max_score !== undefined
+                    || options.start_date
+                    || options.end_date
+                    || sort_by === "date";
                 const candidateLimit = hasFilters ? 5000 : limit * 2;
                 const results = this.voy.search(queryEmbedding, candidateLimit);
-
-                filteredResults = results.neighbors.map((n, index) => {
-                    const meta = this.indexedMetadata.get(n.id) || {};
-                    return {
-                        id: n.id,
-                        relevance_rank: index,
-                        author: meta.author || n.title,
-                        content: meta.content || n.url,
-                        score: meta.score,
-                        date: meta.date || meta.review_created_at
-                    };
-                });
+                filteredResults = buildSemanticSearchRecords(results.neighbors, this.indexedMetadata);
             } else {
-                // If no query or "*", search through all indexed metadata
-                filteredResults = Array.from(this.indexedMetadata.values()).map(meta => ({
-                    id: meta.id,
-                    relevance_rank: 0,
-                    author: meta.author,
-                    content: meta.content,
-                    score: meta.score,
-                    date: meta.date || meta.review_created_at
-                }));
+                filteredResults = buildMetadataOnlyRecords(this.indexedMetadata);
             }
 
-            if (min_score !== undefined) {
-                filteredResults = filteredResults.filter(r => r.score !== undefined && r.score >= min_score);
-            }
-            if (max_score !== undefined) {
-                filteredResults = filteredResults.filter(r => r.score !== undefined && r.score <= max_score);
-            }
-            if (start_date) {
-                filteredResults = filteredResults.filter(r => r.date && new Date(r.date) >= new Date(start_date));
-            }
-            if (end_date) {
-                filteredResults = filteredResults.filter(r => r.date && new Date(r.date) <= new Date(end_date));
-            }
-
-            if (sort_by === "date") {
-                filteredResults.sort((a, b) => {
-                    const dateA = a.date ? new Date(a.date).getTime() : 0;
-                    const dateB = b.date ? new Date(b.date).getTime() : 0;
-                    return sort_direction === "desc" ? dateB - dateA : dateA - dateB;
-                });
-            } else {
-                filteredResults.sort((a, b) => a.relevance_rank - b.relevance_rank);
-            }
-
-            return filteredResults.slice(0, limit);
+            return finalizeSearchResults(filteredResults, options);
         } catch (error: any) {
             console.error("Search Failed:", error);
             throw createError("INTERNAL", "Failed to search reviews");
