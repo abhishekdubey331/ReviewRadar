@@ -17,6 +17,7 @@
 - Done: `160b45e` modular typed refactor of analyze pipeline (`src/tools/analyze.ts`).
 - Done: `d48ee8d` vector store embedding key injection via composition root (`src/infrastructure/adapters/voy_vector_store.ts`, `src/index.ts`, `__tests__/voy_vector_store.test.ts`).
 - Done: `81d9a07` extracted `OpenAIEmbeddingClient` from `VoyVectorStore` (`src/infrastructure/adapters/openai_embedding_client.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
+- Done: `8032b1f` extracted Voy persistence module for index/metadata load/save (`src/infrastructure/adapters/voy_persistence.ts`, `src/infrastructure/adapters/voy_vector_store.ts`).
 - Done: `3504052` tool registry schema tightening for `source`, `options`, and export payload shapes (`src/app/tool_registry.ts`).
 - In progress: deeper `VoyVectorStore` decomposition into index/metadata/search services (embedding service extracted).
 - In progress: remaining tool-registry/public-schema alignment.
