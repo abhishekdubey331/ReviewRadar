@@ -6,9 +6,12 @@
   "type": "module",
   "scripts": {
     "scrape": "node scripts/scrape.js",
+    "prepare": "node scripts/install_hooks.js",
     "start": "node --experimental-wasm-modules dist/index.js",
     "start:all": "npm run scrape && npm run start",
     "build": "tsup",
+    "secrets:scan": "node scripts/scan_secrets.js",
+    "secrets:scan:staged": "node scripts/scan_secrets.js --staged",
     "lint:md": "node scripts/lint_markdown.js",
     "lint": "tsc --noEmit && npm run lint:md",
     "test": "vitest run",

@@ -8,6 +8,7 @@ import { IVectorStore } from '../domain/ports/vector_store.js';
 import { ILLMClient } from '../domain/ports/llm_client.js';
 import { logger } from '../utils/logger.js';
 import { getRuntimePolicy } from '../utils/runtime_policy.js';
+import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
 import { buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
 import { redactPII } from '../utils/redact.js';
 import { evaluateRules } from '../engine/rules.js';
@@ -56,9 +57,10 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     let rate_limit_count = 0;
     let budget_guardrail_count = 0;
 
+    const providerDefaults = resolveLlmProviderConfig(getConfig());
     const models_used = {
-        routing: options?.routing_model || 'claude-3-haiku-20240307',
-        summary: options?.summary_model || 'claude-3.5-sonnet-20240620'
+        routing: options?.routing_model || providerDefaults.routing_model,
+        summary: options?.summary_model || providerDefaults.summary_model
     };
 
     const finalReviews = [];

@@ -1,4 +1,4 @@
-# Greenlight App Reviews MCP: Testing & Verification Guidelines
+# ReviewRadar MCP: Testing & Verification Guidelines
 
 To ensure the MCP server remains robust, cost-effective, and fully compliant with the `v1.0` PRD, **every single commit** in the execution plan MUST be accompanied by corresponding tests and manual verification steps.
 

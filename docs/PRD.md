@@ -1,11 +1,11 @@
 # 📄 Product Requirements Document
-**Product:** Greenlight App Review Intelligence MCP Server
+**Product:** ReviewRadar App Review Intelligence MCP Server
 **Owner:** Abhishek Dubey
 **Version:** v1.0 *(Implementation Contract Ready)*
 
 ## 1. Problem Statement
 
-Greenlight receives a continuous stream of app reviews across platforms (Play Store, App Store).
+ReviewRadar ingests a continuous stream of app reviews across platforms (Play Store, App Store).
 
 **Currently:**
 *   Reviews are manually scanned.
@@ -113,7 +113,7 @@ Output for each review:
 **A. Issue Type**
 Bug | Performance | UX | Feature Request | Account/Auth | Billing/Pricing | Safety Concern | Praise | **Spam / Bot / Irrelevant**
 
-**B. Feature Area (Greenlight-specific)**
+**B. Feature Area (domain-specific)**
 Crash Detection | Driving Reports | Family Location | SOS | Card Controls | Allowance/Chores | Savings/Investing | Bank Linking | Notifications | Onboarding | Login/OTP | Other | **Unknown**
 *   *Unknown*: Cannot classify confidently (routes to LLM).
 *   *Other*: Confidently classified as none of the known buckets (does not route).

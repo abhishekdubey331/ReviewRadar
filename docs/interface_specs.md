@@ -1,6 +1,6 @@
-# Greenlight MCP Server Tool Interface Specs (v1.0)
+# ReviewRadar MCP Server Tool Interface Specs (v1.0)
 
-This document contains the exact JSON schemas for the Greenlight App Review Intelligence MCP Server tools. These are the implementation contracts for request/response payloads.
+This document contains the exact JSON schemas for the ReviewRadar MCP Server tools. These are the implementation contracts for request/response payloads.
 
 All tools return either data or error (never both).
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { ConcurrentLLMClient } from '../engine/llmClient.js';
 import { createError } from '../utils/errors.js';
+import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
 
 export const ReplySuggestSchema = z.object({
     review_text: z.string().min(1),
@@ -17,7 +17,8 @@ export async function replySuggestTool(input: unknown, llmClient: ILLMClient) {
 
     const { review_text, tone } = parseResult.data;
 
-    const systemPrompt = `You are a customer support AI for Greenlight.
+    const appName = getConfig().SUPPORT_BRAND_NAME;
+    const systemPrompt = `You are a customer support AI for ${appName}.
 Your tone should be: ${tone}.
 STRICT POLICY:
 1. Do NOT promise refunds.
@@ -29,7 +30,8 @@ Generate a reply draft to the following user review. Write only the reply text.`
 
     let reply_text = "";
     try {
-        const resp = await llmClient.processPrompt(prompt, 'claude-3-haiku-20240307');
+        const model = resolveLlmProviderConfig(getConfig()).routing_model;
+        const resp = await llmClient.processPrompt(prompt, model);
         reply_text = Array.isArray(resp.content) && resp.content[0].type === "text" ? resp.content[0].text : "Fallback response due to unexpected output.";
     } catch (e: any) {
         throw createError("INTERNAL", "LLM failure during reply generation", { message: e.message });

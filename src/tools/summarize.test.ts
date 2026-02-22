@@ -25,7 +25,7 @@ describe('reviews.summarize', () => {
             { text: "Great app!", feature_area: "Other", issue_type: "Praise", severity: "FYI" }
         ];
 
-        const result = await summarizeReviews(input, mockClient);
+        const result = await summarizeReviews(input, mockClient, "test-model");
 
         expect(result.p0_count).toBe(2);
         expect(result.p1_count).toBe(1);

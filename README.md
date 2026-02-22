@@ -18,7 +18,7 @@ ReviewRadar is a Model Context Protocol (MCP) server for ingesting, indexing, an
 
 ## Quickstart
 ```bash
-git clone https://github.com/your-username/ReviewRadar.git
+git clone https://github.com/<your-org-or-user>/ReviewRadar.git
 cd ReviewRadar
 npm install
 cp .env.example .env
@@ -27,8 +27,10 @@ cp .env.example .env
 Update `.env` with your app link and provider key.
 
 ```env
-APP_LINK=https://play.google.com/store/apps/details?id=com.whatsapp
+APP_LINK=https://play.google.com/store/apps/details?id=com.example.app
 OPENAI_API_KEY=sk-...
+LLM_PROVIDER=openai
+SUPPORT_BRAND_NAME=your app
 ```
 
 Build and run:

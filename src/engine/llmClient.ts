@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import retry from 'async-retry';
 import pLimit from 'p-limit';
 import { ILLMClient, LLMResponse } from '../domain/ports/llm_client.js';
-import { getConfig } from '../utils/config.js';
+import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
 import { getRuntimePolicy } from '../utils/runtime_policy.js';
 
 export interface LLMClientOptions {
@@ -24,6 +24,7 @@ export class ConcurrentLLMClient implements ILLMClient {
 
     constructor(options?: LLMClientOptions) {
         const envConfig = getConfig();
+        const providerConfig = resolveLlmProviderConfig(envConfig);
         const policy = getRuntimePolicy();
         const concurrency = options?.concurrency ?? 15;
         this.limit = pLimit(concurrency);
@@ -32,12 +33,12 @@ export class ConcurrentLLMClient implements ILLMClient {
         this.retryMinTimeoutMs = policy.llm_retry_min_timeout_ms;
         this.retryMaxTimeoutMs = policy.llm_retry_max_timeout_ms;
 
-        if (envConfig.OPENAI_API_KEY) {
+        if (providerConfig.provider === 'openai') {
             this.provider = 'openai';
-            this.openai = new OpenAI({ apiKey: envConfig.OPENAI_API_KEY });
-        } else if (envConfig.ANTHROPIC_API_KEY) {
+            this.openai = new OpenAI({ apiKey: envConfig.OPENAI_API_KEY! });
+        } else if (providerConfig.provider === 'anthropic') {
             this.provider = 'anthropic';
-            this.anthropic = new Anthropic({ apiKey: envConfig.ANTHROPIC_API_KEY });
+            this.anthropic = new Anthropic({ apiKey: envConfig.ANTHROPIC_API_KEY! });
         } else if (options?.apiKey) {
             this.provider = 'anthropic';
             this.anthropic = new Anthropic({ apiKey: options.apiKey });
@@ -66,7 +67,7 @@ export class ConcurrentLLMClient implements ILLMClient {
                 async (bail) => {
                     try {
                         if (this.provider === 'openai' && this.openai) {
-                            const oaiModel = model === 'claude-3-haiku-20240307' ? 'gpt-4o-mini' : (model || 'gpt-4o');
+                            const oaiModel = model || 'gpt-4o';
                             const response = await this.withTimeout(this.openai.chat.completions.create({
                                 model: oaiModel,
                                 max_tokens: 1024,

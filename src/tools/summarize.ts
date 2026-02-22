@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { createError } from '../utils/errors.js';
 import { ILLMClient } from '../domain/ports/llm_client.js';
 import { AnalyzedReviewSchema } from '../schemas/shared.js';
+import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
 
 export interface SummarizeReviewInput {
     text?: string;
@@ -24,7 +25,7 @@ const SummarizeToolInputSchema = z.object({
 export async function summarizeReviews(
     reviews: SummarizeReviewInput[],
     llmClient: ILLMClient,
-    model: string = 'claude-3.5-sonnet-20240620'
+    model: string
 ): Promise<{
     top_themes: string[];
     p0_count: number;
@@ -88,6 +89,7 @@ export async function summarizeTool(input: unknown, llmClient: ILLMClient) {
         throw createError("INVALID_SCHEMA", "Invalid summarize parameters", parseResult.error.format());
     }
 
-    const res = await summarizeReviews(parseResult.data.reviews, llmClient);
+    const defaultModel = resolveLlmProviderConfig(getConfig()).summary_model;
+    const res = await summarizeReviews(parseResult.data.reviews, llmClient, defaultModel);
     return { data: res };
 }

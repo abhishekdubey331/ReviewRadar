@@ -11,7 +11,7 @@ Welcome to the ReviewRadar MCP repository. Ensure you read `docs/PRD.md` and `do
 
 **Installation:**
 ```bash
-git clone https://github.com/abhishekdubey331/ReviewRadar.git
+git clone https://github.com/<your-org-or-user>/ReviewRadar.git
 cd ReviewRadar
 npm install
 ```
@@ -19,7 +19,9 @@ npm install
 **Environment Variables:**
 Create a `.env` file in the root directory:
 ```bash
-ANTHROPIC_API_KEY="sk-ant-api03-..."
+OPENAI_API_KEY="sk-..."
+LLM_PROVIDER="openai"
+SUPPORT_BRAND_NAME="your app"
 # Optional: Set global budget circuit breaker
 MAX_BATCH_BUDGET_USD="5.00"
 ```

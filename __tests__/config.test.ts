@@ -24,9 +24,26 @@ describe('Configuration Validation', () => {
         expect(result.success).toBe(false);
     });
 
+    it('requires explicit LLM_PROVIDER when both provider keys are configured', () => {
+        const result = configSchema.safeParse({
+            OPENAI_API_KEY: 'sk-123',
+            ANTHROPIC_API_KEY: 'sk-ant-123'
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts explicit LLM_PROVIDER when both keys are configured', () => {
+        const result = configSchema.safeParse({
+            OPENAI_API_KEY: 'sk-123',
+            ANTHROPIC_API_KEY: 'sk-ant-123',
+            LLM_PROVIDER: 'openai'
+        });
+        expect(result.success).toBe(true);
+    });
+
     it('parseScrapeConfig validates APP_LINK separately for scraper flows', () => {
         const result = parseScrapeConfig({
-            APP_LINK: 'https://play.google.com/store/apps/details?id=com.whatsapp'
+            APP_LINK: 'https://play.google.com/store/apps/details?id=com.example.app'
         } as NodeJS.ProcessEnv);
         expect(result.APP_LINK).toContain('play.google.com');
     });
@@ -55,21 +72,21 @@ describe('Configuration Validation', () => {
 
 describe('App ID Extraction', () => {
     it('identifies Play Store links', () => {
-        expect(isPlayStoreLink('https://play.google.com/store/apps/details?id=com.whatsapp')).toBe(true);
-        expect(isPlayStoreLink('https://apps.apple.com/us/app/whatsapp/id310633997')).toBe(false);
+        expect(isPlayStoreLink('https://play.google.com/store/apps/details?id=com.example.app')).toBe(true);
+        expect(isPlayStoreLink('https://apps.apple.com/us/app/example-app/id1234567890')).toBe(false);
     });
 
     it('identifies App Store links', () => {
-        expect(isAppStoreLink('https://apps.apple.com/us/app/whatsapp/id310633997')).toBe(true);
-        expect(isAppStoreLink('https://play.google.com/store/apps/details?id=com.whatsapp')).toBe(false);
+        expect(isAppStoreLink('https://apps.apple.com/us/app/example-app/id1234567890')).toBe(true);
+        expect(isAppStoreLink('https://play.google.com/store/apps/details?id=com.example.app')).toBe(false);
     });
 
     it('extracts Android bundle ID', () => {
-        expect(extractAppId('https://play.google.com/store/apps/details?id=com.whatsapp')).toBe('com.whatsapp');
+        expect(extractAppId('https://play.google.com/store/apps/details?id=com.example.app')).toBe('com.example.app');
     });
 
     it('extracts iOS Apple ID', () => {
-        expect(extractAppId('https://apps.apple.com/us/app/whatsapp/id310633997')).toBe('310633997');
+        expect(extractAppId('https://apps.apple.com/us/app/example-app/id1234567890')).toBe('1234567890');
     });
 
     it('throws error on unsupported URL', () => {

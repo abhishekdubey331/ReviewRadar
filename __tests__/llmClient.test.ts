@@ -21,6 +21,11 @@ describe('Concurrent LLM Client (Anthropic Native)', () => {
         // Force the config to use Anthropic so client.anthropic is defined
         vi.spyOn(configModule, 'getConfig').mockReturnValue({
             ANTHROPIC_API_KEY: 'test-key',
+            OPENAI_ROUTING_MODEL: 'gpt-4o-mini',
+            OPENAI_SUMMARY_MODEL: 'gpt-4o',
+            ANTHROPIC_ROUTING_MODEL: 'claude-3-haiku-20240307',
+            ANTHROPIC_SUMMARY_MODEL: 'claude-3-5-sonnet-20241022',
+            SUPPORT_BRAND_NAME: 'test app',
             MAX_BATCH_BUDGET_USD: '5.00',
             STORAGE_DIR: 'storage'
         });
