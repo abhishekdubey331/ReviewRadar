@@ -1,0 +1,246 @@
+import { z } from 'zod';
+import pLimit from 'p-limit';
+import { SourceSchema } from '../schemas/shared.js';
+import { loadReviews } from './import.js';
+import { CircuitBreaker } from '../engine/circuitBreaker.js';
+import { createError } from '../utils/errors.js';
+import { IVectorStore } from '../domain/ports/vector_store.js';
+import { ILLMClient } from '../domain/ports/llm_client.js';
+import { logger } from '../utils/logger.js';
+import { getRuntimePolicy } from '../utils/runtime_policy.js';
+import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
+import { buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
+import { redactPII } from '../utils/redact.js';
+import { evaluateRules } from '../engine/rules.js';
+
+export const AnalyzeOptionsSchema = z.object({
+    budget_usd: z.number().optional(),
+    concurrency: z.number().int().min(1).max(20).default(15).optional(),
+    // Backward-compatible public option; prefer internal_max_reviews for orchestrated calls.
+    max_reviews: z.number().int().min(1).max(5000).optional(),
+    routing_model: z.string().optional(),
+    summary_model: z.string().optional(),
+    include_summary: z.boolean().default(false).optional(),
+    include_raw_text: z.boolean().default(false).optional(),
+    alert_limit: z.number().int().min(1).max(500).default(50).optional(),
+    // Internal orchestration hint used by dispatcher-level PM flows.
+    internal_max_reviews: z.number().int().min(1).max(2000).optional(),
+    // Internal fast path for summary tools where deterministic speed is preferred.
+    internal_rule_only: z.boolean().optional(),
+});
+
+export const AnalyzeToolInputSchema = z.object({
+    source: SourceSchema.optional(),
+    options: AnalyzeOptionsSchema.optional(),
+});
+
+export interface AnalyzeDeps {
+    vectorStore: IVectorStore;
+    llmClient: ILLMClient;
+}
+
+const FALLBACK_ROUTING_MODEL = "gpt-4o-mini";
+const FALLBACK_SUMMARY_MODEL = "gpt-4o";
+
+function resolveModelDefaults(options?: z.infer<typeof AnalyzeOptionsSchema>) {
+    if (options?.routing_model && options?.summary_model) {
+        return { routing: options.routing_model, summary: options.summary_model };
+    }
+
+    try {
+        const providerDefaults = resolveLlmProviderConfig(getConfig());
+        return {
+            routing: options?.routing_model || providerDefaults.routing_model,
+            summary: options?.summary_model || providerDefaults.summary_model
+        };
+    } catch {
+        // Tests and offline runs can inject llmClient without env keys.
+        return {
+            routing: options?.routing_model || FALLBACK_ROUTING_MODEL,
+            summary: options?.summary_model || FALLBACK_SUMMARY_MODEL
+        };
+    }
+}
+
+export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
+    const parseResult = AnalyzeToolInputSchema.safeParse(input);
+    if (!parseResult.success) {
+        throw createError('INVALID_SCHEMA', 'Invalid analyze parameters', parseResult.error.format());
+    }
+
+    const { source, options } = parseResult.data;
+    const includeRawText = options?.include_raw_text ?? false;
+    const { llmClient } = deps;
+    const runtimePolicy = getRuntimePolicy();
+    const budgetUsd = options?.budget_usd ?? runtimePolicy.default_analyze_budget_usd;
+    const loaded = await loadReviews({ source });
+    const allLoadedReviews = loaded.reviews as LoadedReview[];
+    const maxReviews = options?.internal_max_reviews ?? options?.max_reviews ?? 300;
+    const sortedByRecency = [...allLoadedReviews].sort((a, b) => {
+        const aTs = a.review_created_at ? Date.parse(a.review_created_at) : Number.NaN;
+        const bTs = b.review_created_at ? Date.parse(b.review_created_at) : Number.NaN;
+        const aNum = Number.isFinite(aTs) ? aTs : 0;
+        const bNum = Number.isFinite(bTs) ? bTs : 0;
+        return bNum - aNum;
+    });
+    const rawInputReviews = sortedByRecency.slice(0, maxReviews);
+
+    const startTime = Date.now();
+    const circuitBreaker = new CircuitBreaker();
+
+    let filtered_spam = 0;
+    let llm_routed_count = 0;
+    let rule_only_count = 0;
+    let hybrid_count = 0;
+    let timeout_count = 0;
+    let rate_limit_count = 0;
+    let budget_guardrail_count = 0;
+
+    const models_used = resolveModelDefaults(options);
+
+    const finalReviews = [];
+    const safety_alerts = [];
+    const processingLimit = pLimit(options?.concurrency ?? 15);
+
+    const settledResults = await Promise.allSettled(
+        rawInputReviews.map((review) =>
+            processingLimit(() => processSingleReview(
+                review,
+                llmClient,
+                models_used.routing,
+                circuitBreaker,
+                budgetUsd,
+                options?.internal_rule_only ?? false
+            ))
+        )
+    );
+
+    const results = settledResults.map((settled, index) => {
+        if (settled.status === 'fulfilled') {
+            return settled.value;
+        }
+
+        const review = rawInputReviews[index];
+        const ruleOutput = evaluateRules(redactPII(review.content), review.score);
+        return {
+            type: 'processed' as const,
+            review,
+            needsLlm: true,
+            output: {
+                ...ruleOutput,
+                classification_source: 'rule_engine' as const
+            },
+            fallback_reason: 'provider_failure' as const
+        };
+    });
+
+    for (const result of results) {
+        if (result.type === 'spam') {
+            filtered_spam++;
+            continue;
+        }
+
+        let out = result.output;
+        if (result.fallback_reason === 'timeout') timeout_count++;
+        if (result.fallback_reason === 'rate_limited') rate_limit_count++;
+        if (result.fallback_reason === 'budget_guardrail') budget_guardrail_count++;
+        try {
+            finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
+        } catch {
+            out = {
+                ...evaluateRules(redactPII(result.review.content), result.review.score),
+                classification_source: 'rule_engine'
+            };
+            finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
+        }
+
+        if (out.classification_source === 'hybrid') {
+            hybrid_count++;
+        } else {
+            rule_only_count++;
+        }
+
+        if (result.needsLlm && out.classification_source === 'hybrid') {
+            llm_routed_count++;
+        }
+
+        if (out.severity === 'P0' || out.severity === 'P1') {
+            safety_alerts.push(buildSafetyAlert(result.review, out, includeRawText));
+        }
+    }
+
+    const total_processed = finalReviews.length;
+    const total_reviews_input = rawInputReviews.length;
+    const total_reviews_available = allLoadedReviews.length;
+    const spam_ratio = total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0;
+    const llm_routed_ratio = total_processed > 0 ? llm_routed_count / total_processed : 0;
+    const rule_coverage_drop = total_processed > 0 && llm_routed_ratio > 0.4;
+    const sampled = total_reviews_available > total_reviews_input;
+
+    const cbState = circuitBreaker.getState();
+
+    const warnings: string[] = [];
+    if (cbState.consecutiveFailures > 0) warnings.push('LLM Fallback Triggered');
+    if (spam_ratio > 0.2) warnings.push('Suspiciously high spam ratio detected.');
+    if (budget_guardrail_count > 0) warnings.push('Budget guardrail triggered; routed reviews fell back to rule engine.');
+    const degraded_reasons = [
+        ...(cbState.consecutiveFailures > 0 ? ['llm_fallback_triggered'] : []),
+        ...(timeout_count > 0 ? ['llm_timeout'] : []),
+        ...(rate_limit_count > 0 ? ['rate_limited'] : []),
+        ...(budget_guardrail_count > 0 ? ['budget_guardrail'] : [])
+    ];
+    const degraded_mode = degraded_reasons.length > 0;
+
+    if (rule_coverage_drop) {
+        logger.warn('analyze.rule_coverage_drop', {
+            llm_routed_ratio,
+            threshold: 0.4
+        });
+    }
+
+    logger.info('analyze.batch_processed', {
+        total_reviews_input,
+        filtered_spam,
+        llm_routed_count,
+        hybrid_count,
+        rule_only_count,
+        rules_fallback: warnings.includes('LLM Fallback Triggered')
+    });
+
+    return {
+        data: {
+            metadata: {
+                schema_version: '1.0',
+                rules_version: '1.0',
+                taxonomy_version: '1.1',
+                models_used,
+                pii_redaction_engine: 'Regex/Custom',
+                processed_at: new Date().toISOString(),
+                total_reviews_input,
+                total_reviews_available,
+                sampled,
+                max_reviews: maxReviews,
+                filtered_spam,
+                spam_ratio,
+                total_processed,
+                llm_routed_count,
+                llm_routed_ratio,
+                rule_only_count,
+                hybrid_count,
+                rule_coverage_drop,
+                warnings,
+                degraded_mode,
+                degraded_reasons,
+                budget_usd: budgetUsd,
+                budget_guardrail_count,
+                rate_limit_count,
+                retry_count: cbState.totalFailures,
+                timeout_count,
+                cost_estimate_usd: cbState.estimatedCostUsd,
+                execution_time_ms: Date.now() - startTime
+            },
+            safety_alerts,
+            reviews: finalReviews.length > 1000 ? finalReviews.slice(0, 1000) : finalReviews
+        }
+    };
+}

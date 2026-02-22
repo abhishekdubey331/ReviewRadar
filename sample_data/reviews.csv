@@ -1,0 +1,11 @@
+review_id,platform,user_name,content,score,app_version,device,os_version,review_created_at
+r001,play_store,John Doe,This app is amazing and helps me manage my kids allowance perfectly!,5,1.2.0,Pixel 7,Android 14,2026-02-21T10:00:00Z
+r002,app_store,JaneS,Crash detection didn't work when I dropped my phone. Very concerning.,1,1.2.0,iPhone 15,iOS 17.1,2026-02-21T10:05:00Z
+r003,play_store,Mike T.,The app freezes every time I try to link my plaid account.,2,1.1.9,Galaxy S23,Android 13,2026-02-21T10:10:00Z
+r004,app_store,Alice Wonderland,Wish there was a dark mode! Otherwise great app.,4,1.2.0,iPhone 13,iOS 16,2026-02-21T10:15:00Z
+r005,play_store,Bob Builder,Cannot login to my account! It keeps saying network error.,1,1.2.0,Pixel 6,Android 14,2026-02-21T10:20:00Z
+r006,app_store,AngryUser123,Scam! Charged me twice for the premium subscription.,1,1.1.5,iPhone 14,iOS 17.0,2026-02-21T10:25:00Z
+r007,play_store,HappyDad,Location tracking is spot on. Gives me great peace of mind.,5,1.2.0,Galaxy Z Fold 5,Android 14,2026-02-21T10:30:00Z
+r008,app_store,MomOfThree,SOS button emergency alert failed during our test today.,1,1.2.0,iPhone 12,iOS 16.5,2026-02-21T10:35:00Z
+r009,play_store,TechGeek,UI is a bit slow and laggy on older devices.,3,1.1.9,Galaxy A51,Android 12,2026-02-21T10:40:00Z
+r010,app_store,SpamBot,a c,1,1.0.0,Unknown,Unknown,2026-02-21T10:45:00Z

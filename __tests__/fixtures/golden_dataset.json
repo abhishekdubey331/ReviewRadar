@@ -1,0 +1,202 @@
+[
+    {
+        "input": {
+            "review_id": "g01",
+            "content": "can't login to my account",
+            "score": 1
+        },
+        "expected_issue_type": "Bug",
+        "expected_severity": "P0",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g02",
+            "content": "scam stole my money",
+            "score": 1
+        },
+        "expected_issue_type": "Bug",
+        "expected_severity": "P0",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g03",
+            "content": "crash detection didn't detect crash",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    },
+    {
+        "input": {
+            "review_id": "g04",
+            "content": "emergency alert failed sos",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    },
+    {
+        "input": {
+            "review_id": "g05",
+            "content": "app won't open",
+            "score": 1
+        },
+        "expected_issue_type": "Bug",
+        "expected_severity": "P0",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g06",
+            "content": "location not updating",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    },
+    {
+        "input": {
+            "review_id": "g07",
+            "content": "stopped sharing location",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    },
+    {
+        "input": {
+            "review_id": "g08",
+            "content": "wish there was a dark mode wow so nice long string",
+            "score": 4
+        },
+        "expected_issue_type": "Feature Request",
+        "expected_severity": "FYI",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g09",
+            "content": "laggy and slow performance oh no",
+            "score": 2
+        },
+        "expected_issue_type": "Performance",
+        "expected_severity": "P1",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g10",
+            "content": "charged me twice refund money long text string",
+            "score": 1
+        },
+        "expected_issue_type": "Billing/Pricing",
+        "expected_severity": "P0",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g11",
+            "content": "not getting notifications",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    },
+    {
+        "input": {
+            "review_id": "g12",
+            "content": "a c",
+            "score": 1
+        },
+        "expected_issue_type": "Spam / Bot / Irrelevant",
+        "expected_severity": "FYI",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g13",
+            "content": "123",
+            "score": 1
+        },
+        "expected_issue_type": "Spam / Bot / Irrelevant",
+        "expected_severity": "FYI",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g14",
+            "content": "good job loved it",
+            "score": 5
+        },
+        "expected_issue_type": "Praise",
+        "expected_severity": "FYI",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g15",
+            "content": "how to link plaid? long text string here",
+            "score": 3
+        },
+        "expected_issue_type": "UX",
+        "expected_severity": "P2",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g16",
+            "content": "i love it very much",
+            "score": 5
+        },
+        "expected_issue_type": "Praise",
+        "expected_severity": "FYI",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g17",
+            "content": "freeze card is not freezing",
+            "score": 2
+        },
+        "expected_issue_type": "Performance",
+        "expected_severity": "P1",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g18",
+            "content": "allowance task confusing very confusing indeed",
+            "score": 3
+        },
+        "expected_issue_type": "Bug",
+        "expected_severity": "P1",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g19",
+            "content": "money missing from account where did it go!!",
+            "score": 1
+        },
+        "expected_issue_type": "Bug",
+        "expected_severity": "P0",
+        "is_safety": false
+    },
+    {
+        "input": {
+            "review_id": "g20",
+            "content": "sos button fails completely",
+            "score": 1
+        },
+        "expected_issue_type": "Safety Concern",
+        "expected_severity": "P0",
+        "is_safety": true
+    }
+]
