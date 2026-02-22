@@ -2,11 +2,12 @@ import { Voy, EmbeddedResource } from "voy-search/voy_search.js";
 import { createError } from "../../utils/errors.js";
 import fs from "fs";
 import path from "path";
-import pLimit from "p-limit";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 import { EmbeddingClient, OpenAIEmbeddingClient } from "./openai_embedding_client.js";
 import { loadPersistedMetadata, loadVoyIndex, saveVoyState } from "./voy_persistence.js";
 import { buildMetadataOnlyRecords, buildSemanticSearchRecords, finalizeSearchResults } from "./voy_search_service.js";
+import { addEmbeddingsInBatches, indexReviewsInChunks } from "./voy_indexing_service.js";
+import { logger } from "../../utils/logger.js";
 
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
@@ -36,10 +37,10 @@ export class VoyVectorStore implements IVectorStore {
                 this.voy = loadVoyIndex(this.indexFile) ?? new Voy();
                 this.isInitialized = fs.existsSync(this.indexFile);
                 if (this.isInitialized) {
-                    console.error("Loaded persistent vector index from disk.");
+                    logger.info("voy.index_loaded", { index_file: this.indexFile });
                 }
             } catch (e) {
-                console.error("Failed to load persistent index, creating new one:", e);
+                logger.error("voy.index_load_failed", { message: e instanceof Error ? e.message : String(e) });
                 this.voy = new Voy();
             }
         }
@@ -48,7 +49,7 @@ export class VoyVectorStore implements IVectorStore {
             try {
                 this.indexedMetadata = loadPersistedMetadata(this.metadataFile);
             } catch (e) {
-                console.error("Failed to load metadata:", e);
+                logger.error("voy.metadata_load_failed", { message: e instanceof Error ? e.message : String(e) });
             }
         }
     }
@@ -66,9 +67,9 @@ export class VoyVectorStore implements IVectorStore {
                 this.indexedMetadata
             );
 
-            console.error(`Vector index and metadata (${this.indexedMetadata.size} reviews) saved to disk.`);
+            logger.info("voy.state_saved", { total_reviews: this.indexedMetadata.size });
         } catch (e) {
-            console.error("Failed to save vector store state:", e);
+            logger.error("voy.state_save_failed", { message: e instanceof Error ? e.message : String(e) });
         }
     }
 
@@ -78,36 +79,18 @@ export class VoyVectorStore implements IVectorStore {
             && embedding.every(v => Number.isFinite(v));
     }
 
-    private addWithBisect(items: EmbeddedResource[]) {
-        if (!this.voy || items.length === 0) return;
-
-        try {
-            this.voy.add({ embeddings: items });
-            return;
-        } catch (error) {
-            if (items.length === 1) {
-                console.error(`Skipping vector id=${items[0].id} after Voy.add failure:`, error);
-                return;
-            }
-        }
-
-        const mid = Math.floor(items.length / 2);
-        this.addWithBisect(items.slice(0, mid));
-        this.addWithBisect(items.slice(mid));
-    }
-
     private addEmbeddingsSafely(items: EmbeddedResource[]) {
         if (!this.voy || items.length === 0) return;
-
-        for (let i = 0; i < items.length; i += this.voyAddBatchSize) {
-            const batch = items.slice(i, i + this.voyAddBatchSize);
-            try {
-                this.voy.add({ embeddings: batch });
-            } catch (error) {
-                console.error(`Voy.add failed for batch size=${batch.length}; retrying with bisect fallback.`);
-                this.addWithBisect(batch);
-            }
-        }
+        addEmbeddingsInBatches(
+            this.voy,
+            items,
+            this.voyAddBatchSize,
+            (batchSize) => logger.warn("voy.add_batch_failed", { batch_size: batchSize }),
+            (id, error) => logger.error("voy.add_single_failed", {
+                vector_id: id,
+                message: error instanceof Error ? error.message : String(error)
+            })
+        );
     }
 
     async indexReviews(reviews: ReviewRecord[]): Promise<number> {
@@ -116,56 +99,32 @@ export class VoyVectorStore implements IVectorStore {
         const newReviews = reviews.filter(r => !this.indexedMetadata.has(String(r.review_id)));
 
         if (newReviews.length === 0) {
-            console.error("All reviews in this batch are already indexed. Skipping.");
+            logger.info("voy.index_skipped_all_existing");
             return 0;
         }
 
-        console.error(`Indexing ${newReviews.length} new reviews (${this.embeddingDimensions}-dim, checkpointed)...`);
+        logger.info("voy.index_start", {
+            new_reviews: newReviews.length,
+            embedding_dimensions: this.embeddingDimensions
+        });
 
         try {
             const chunkSize = 500;
-            const concurrencyLimit = pLimit(2);
             const saveInterval = 5000;
 
             let processedInThisRun = 0;
 
             for (let i = 0; i < newReviews.length; i += saveInterval) {
                 const saveBatch = newReviews.slice(i, i + saveInterval);
-                const tasks = [];
-
-                for (let j = 0; j < saveBatch.length; j += chunkSize) {
-                    const reviewChunk = saveBatch.slice(j, j + chunkSize);
-                    const texts = reviewChunk.map(r => r.content);
-
-                    tasks.push(concurrencyLimit(async () => {
-                        const embeddings = await this.embeddingClient.embed(texts);
-
-                        return reviewChunk
-                            .map((r, idx) => ({
-                                id: String(r.review_id),
-                                title: r.user_name || "Review",
-                                url: r.content,
-                                embeddings: embeddings[idx],
-                                reviewMetadata: {
-                                    id: String(r.review_id),
-                                    author: r.user_name,
-                                    content: r.content,
-                                    score: r.score,
-                                    date: r.review_created_at,
-                                }
-                            }))
-                            .filter(item => {
-                                const valid = this.isValidEmbedding(item.embeddings);
-                                if (!valid) {
-                                    console.error(`Skipping invalid embedding for review_id=${item.id}`);
-                                }
-                                return valid;
-                            });
-                    }));
-                }
-
-                const batchResults = await Promise.all(tasks);
-                const flatBatch = batchResults.flat();
+                const flatBatch = await indexReviewsInChunks(
+                    saveBatch,
+                    { chunkSize, concurrency: 2 },
+                    {
+                        embed: (input) => this.embeddingClient.embed(input),
+                        isValidEmbedding: (embedding) => this.isValidEmbedding(embedding),
+                        onInvalidEmbedding: (reviewId) => logger.warn("voy.invalid_embedding", { review_id: reviewId })
+                    }
+                );
 
                 if (!this.voy) throw new Error("Vector store not initialized properly.");
 
@@ -189,12 +148,16 @@ export class VoyVectorStore implements IVectorStore {
                 const totalIndexed = this.indexedMetadata.size;
                 const progress = Math.round((totalIndexed / (newReviews.length + (this.indexedMetadata.size - processedInThisRun))) * 100);
 
-                console.error(`Checkpoint: [${progress}%] Indexed ${totalIndexed} total reviews to disk. (+${processedInThisRun} in this run)`);
+                logger.info("voy.index_checkpoint", {
+                    progress_percent: progress,
+                    total_indexed: totalIndexed,
+                    processed_in_run: processedInThisRun
+                });
             }
 
             return processedInThisRun;
         } catch (error: any) {
-            console.error("Indexing Process Failed:", error);
+            logger.error("voy.index_failed", { message: error instanceof Error ? error.message : String(error) });
             throw createError("INTERNAL", "Failed to index reviews");
         }
     }
@@ -229,7 +192,7 @@ export class VoyVectorStore implements IVectorStore {
 
             return finalizeSearchResults(filteredResults, options);
         } catch (error: any) {
-            console.error("Search Failed:", error);
+            logger.error("voy.search_failed", { message: error instanceof Error ? error.message : String(error) });
             throw createError("INTERNAL", "Failed to search reviews");
         }
     }
