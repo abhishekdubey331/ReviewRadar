@@ -88,4 +88,30 @@ describe('Analyze Tool', () => {
         expect(first.data.metadata.cost_estimate_usd).toBeGreaterThan(0);
         expect(second.data.metadata.cost_estimate_usd).toBe(first.data.metadata.cost_estimate_usd);
     });
+
+    it('falls back to rule engine when LLM output cannot be mapped to valid analyzed schema', async () => {
+        const input = {
+            source: { type: "inline", reviews: [{ review_id: 'r1', content: 'app keeps crashing', score: 1 }] },
+            options: { concurrency: 1 }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const mockLlmClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: '{"issue_type": "Bug", "feature_area": "Crash Detection", "severity": "CRITICAL"}' }],
+                usage: { input_tokens: 10, output_tokens: 10 }
+            })
+        } as any;
+
+        const result: any = await analyzeReviewsTool(input, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
+        expect(result.data.metadata.total_processed).toBe(2);
+        expect(result.data.reviews[0].classification_source).toBe('rule_engine');
+    });
 });

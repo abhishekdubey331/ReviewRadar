@@ -75,6 +75,7 @@ export class ConcurrentLLMClient implements ILLMClient {
 
                             return {
                                 content: [{ type: 'text', text: response.choices[0]?.message?.content || '' }],
+                                model: oaiModel,
                                 usage: {
                                     input_tokens: response.usage?.prompt_tokens || 0,
                                     output_tokens: response.usage?.completion_tokens || 0
@@ -95,6 +96,7 @@ export class ConcurrentLLMClient implements ILLMClient {
 
                             return {
                                 content: textBlocks.length > 0 ? textBlocks : [{ type: 'text', text: '' }],
+                                model: model || 'claude-3-haiku-20240307',
                                 usage: {
                                     input_tokens: response.usage?.input_tokens || 0,
                                     output_tokens: response.usage?.output_tokens || 0

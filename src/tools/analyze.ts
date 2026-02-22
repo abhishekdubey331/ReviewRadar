@@ -9,6 +9,8 @@ import { ILLMClient } from '../domain/ports/llm_client.js';
 import { logger } from '../utils/logger.js';
 import { getRuntimePolicy } from '../utils/runtime_policy.js';
 import { buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
+import { redactPII } from '../utils/redact.js';
+import { evaluateRules } from '../engine/rules.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -63,11 +65,30 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const safety_alerts = [];
     const processingLimit = pLimit(options?.concurrency ?? 15);
 
-    const results = await Promise.all(
+    const settledResults = await Promise.allSettled(
         rawInputReviews.map((review) =>
             processingLimit(() => processSingleReview(review, llmClient, models_used.routing, circuitBreaker, budgetUsd))
         )
     );
+
+    const results = settledResults.map((settled, index) => {
+        if (settled.status === 'fulfilled') {
+            return settled.value;
+        }
+
+        const review = rawInputReviews[index];
+        const ruleOutput = evaluateRules(redactPII(review.content), review.score);
+        return {
+            type: 'processed' as const,
+            review,
+            needsLlm: true,
+            output: {
+                ...ruleOutput,
+                classification_source: 'rule_engine' as const
+            },
+            fallback_reason: 'provider_failure' as const
+        };
+    });
 
     for (const result of results) {
         if (result.type === 'spam') {
@@ -75,10 +96,20 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
             continue;
         }
 
-        const out = result.output;
+        let out = result.output;
         if (result.fallback_reason === 'timeout') timeout_count++;
         if (result.fallback_reason === 'rate_limited') rate_limit_count++;
         if (result.fallback_reason === 'budget_guardrail') budget_guardrail_count++;
+        try {
+            finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
+        } catch {
+            out = {
+                ...evaluateRules(redactPII(result.review.content), result.review.score),
+                classification_source: 'rule_engine'
+            };
+            finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
+        }
+
         if (out.classification_source === 'hybrid') {
             hybrid_count++;
         } else {
@@ -88,8 +119,6 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
         if (result.needsLlm && out.classification_source === 'hybrid') {
             llm_routed_count++;
         }
-
-        finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
 
         if (out.severity === 'P0' || out.severity === 'P1') {
             safety_alerts.push(buildSafetyAlert(result.review, out, includeRawText));

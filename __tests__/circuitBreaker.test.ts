@@ -54,4 +54,10 @@ describe('Circuit Breaker', () => {
 
         expect(() => cb.recordFailure()).not.toThrowError(CircuitBreakerError);
     });
+
+    it('uses model-aware pricing when model is provided', () => {
+        cb.recordSuccess(1000000, 1000000, 'gpt-4o-mini');
+        const state = cb.getState();
+        expect(state.estimatedCostUsd).toBeCloseTo(0.75);
+    });
 });

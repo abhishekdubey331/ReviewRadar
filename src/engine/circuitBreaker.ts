@@ -15,6 +15,30 @@ export interface MetricsState {
     recentCalls: boolean[];
 }
 
+interface TokenPricing {
+    inUsdPerM: number;
+    outUsdPerM: number;
+}
+
+const DEFAULT_PRICING: TokenPricing = { inUsdPerM: 0.25, outUsdPerM: 1.25 };
+
+function resolvePricing(model?: string): TokenPricing {
+    const normalized = (model || "").toLowerCase();
+    if (normalized.includes("gpt-4o-mini")) {
+        return { inUsdPerM: 0.15, outUsdPerM: 0.6 };
+    }
+    if (normalized.includes("gpt-4o")) {
+        return { inUsdPerM: 5.0, outUsdPerM: 15.0 };
+    }
+    if (normalized.includes("claude-3.5-sonnet")) {
+        return { inUsdPerM: 3.0, outUsdPerM: 15.0 };
+    }
+    if (normalized.includes("claude-3-haiku")) {
+        return { inUsdPerM: 0.25, outUsdPerM: 1.25 };
+    }
+    return DEFAULT_PRICING;
+}
+
 export class CircuitBreaker {
     private state: MetricsState = {
         inputTokens: 0,
@@ -28,7 +52,7 @@ export class CircuitBreaker {
 
     private isTripped = false;
 
-    public recordSuccess(inputTokens: number, outputTokens: number) {
+    public recordSuccess(inputTokens: number, outputTokens: number, model?: string) {
         if (this.isTripped) throw new CircuitBreakerError();
 
         this.state.totalCalls++;
@@ -36,8 +60,10 @@ export class CircuitBreaker {
         this.state.inputTokens += inputTokens;
         this.state.outputTokens += outputTokens;
 
-        // Claude 3 Haiku: $0.25 per 1M input, $1.25 per 1M output
-        this.state.estimatedCostUsd += (inputTokens * 0.25 / 1000000) + (outputTokens * 1.25 / 1000000);
+        const pricing = resolvePricing(model);
+        this.state.estimatedCostUsd +=
+            (inputTokens * pricing.inUsdPerM / 1000000) +
+            (outputTokens * pricing.outUsdPerM / 1000000);
 
         this.recordCall(true);
     }

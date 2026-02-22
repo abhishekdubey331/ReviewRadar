@@ -103,31 +103,25 @@ export async function loadReviews(input: unknown) {
     let duplicatesDropped = 0;
 
     for (const raw of rawReviews) {
-        if (source.type === "file") {
-            if (typeof raw.score === 'string') {
-                raw.score = parseInt(raw.score, 10);
-            }
-            if (typeof raw.thumbs_up_count === 'string') {
-                raw.thumbs_up_count = parseInt(raw.thumbs_up_count, 10);
-            }
+        const normalized = { ...raw } as Record<string, unknown>;
+        if (typeof normalized.score === 'string') {
+            normalized.score = parseInt(normalized.score, 10);
+        }
+        if (typeof normalized.thumbs_up_count === 'string') {
+            normalized.thumbs_up_count = parseInt(normalized.thumbs_up_count, 10);
+        }
 
-            const reviewParse = ReviewInputSchema.safeParse(raw);
-            if (!reviewParse.success) {
-                invalidRowsDropped++;
-                continue;
-            }
-            const review = reviewParse.data;
-            if (!reviewsMap.has(review.review_id)) {
-                reviewsMap.set(review.review_id, review);
-            } else {
-                duplicatesDropped++;
-            }
+        const reviewParse = ReviewInputSchema.safeParse(normalized);
+        if (!reviewParse.success) {
+            invalidRowsDropped++;
+            continue;
+        }
+
+        const review = reviewParse.data;
+        if (!reviewsMap.has(review.review_id)) {
+            reviewsMap.set(review.review_id, review);
         } else {
-            if (!reviewsMap.has(raw.review_id)) {
-                reviewsMap.set(raw.review_id, raw);
-            } else {
-                duplicatesDropped++;
-            }
+            duplicatesDropped++;
         }
     }
 

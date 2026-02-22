@@ -114,7 +114,7 @@ export async function processSingleReview(
 
         const inTokens = llmResp.usage?.input_tokens || 50;
         const outTokens = llmResp.usage?.output_tokens || 50;
-        circuitBreaker.recordSuccess(inTokens, outTokens);
+        circuitBreaker.recordSuccess(inTokens, outTokens, llmResp.model ?? routingModel);
 
         return {
             type: "processed",
@@ -124,7 +124,11 @@ export async function processSingleReview(
             fallback_reason: null
         };
     } catch (error) {
-        circuitBreaker.recordFailure();
+        try {
+            circuitBreaker.recordFailure();
+        } catch {
+            // If breaker trips, keep request alive by falling back to rules for this item.
+        }
         return {
             type: "processed",
             review,
