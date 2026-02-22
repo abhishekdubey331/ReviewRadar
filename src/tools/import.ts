@@ -11,6 +11,10 @@ export const ImportToolInputSchema = z.object({
     source: SourceSchema.optional(),
 });
 
+export const LoadReviewsInputSchema = z.object({
+    source: SourceSchema,
+});
+
 function resolveDefaultSourcePath(): string {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
@@ -29,7 +33,7 @@ function resolveDefaultSourcePath(): string {
     return existing;
 }
 
-export async function importReviews(input: unknown, vectorStore: IVectorStore) {
+function resolveSource(input: unknown) {
     const parseResult = ImportToolInputSchema.safeParse(input);
     if (!parseResult.success) {
         throw createError("INVALID_SCHEMA", "Invalid import parameters", parseResult.error.format());
@@ -47,6 +51,17 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
     if (source.type === "file" && !existsSync(source.path)) {
         throw createError("FILE_NOT_FOUND", `File not found at path: ${source.path}`);
     }
+
+    return source;
+}
+
+export async function loadReviews(input: unknown) {
+    const parseResult = LoadReviewsInputSchema.safeParse(input);
+    if (!parseResult.success) {
+        throw createError("INVALID_SCHEMA", "Invalid load parameters", parseResult.error.format());
+    }
+
+    const { source } = parseResult.data;
 
     const maxReviews = 50000;
     let rawReviews: any[] = [];
@@ -122,6 +137,33 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
         throw createError("INPUT_TOO_LARGE", `Reviews count (${uniqueReviews.length}) exceeds the maximum allowed (${maxReviews})`);
     }
 
+    const total_reviews_input = rawReviews.length;
+    const filtered_spam = total_reviews_input - uniqueReviews.length;
+
+    return {
+        reviews: uniqueReviews,
+        diagnostics: {
+            total_reviews_input,
+            filtered_spam,
+            invalid_rows_dropped: invalidRowsDropped,
+            duplicates_dropped: duplicatesDropped,
+            spam_ratio: total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0
+        }
+    };
+}
+
+export async function importReviews(input: unknown, vectorStore: IVectorStore) {
+    const source = resolveSource(input);
+    const loaded = await loadReviews({ source });
+    const uniqueReviews = loaded.reviews;
+    const {
+        total_reviews_input,
+        filtered_spam,
+        invalid_rows_dropped,
+        duplicates_dropped,
+        spam_ratio
+    } = loaded.diagnostics;
+
     let vector_indexing_status = "disabled";
     let import_status: "success" | "partial_success" = "success";
     try {
@@ -131,9 +173,6 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
         vector_indexing_status = `failed: ${e.message}`;
         import_status = "partial_success";
     }
-
-    const total_reviews_input = rawReviews.length;
-    const filtered_spam = total_reviews_input - uniqueReviews.length;
 
     return {
         data: {
@@ -146,9 +185,9 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
                 processed_at: new Date().toISOString(),
                 total_reviews_input,
                 filtered_spam,
-                invalid_rows_dropped: invalidRowsDropped,
-                duplicates_dropped: duplicatesDropped,
-                spam_ratio: total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0,
+                invalid_rows_dropped,
+                duplicates_dropped,
+                spam_ratio,
                 total_processed: uniqueReviews.length,
                 import_status,
                 vector_indexing_status,

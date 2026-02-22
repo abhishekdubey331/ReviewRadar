@@ -2,13 +2,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { analyzeReviewsTool } from '../src/tools/analyze.js';
 
 vi.mock('../src/tools/import.js', () => ({
-    importReviews: vi.fn().mockResolvedValue({
-        data: {
-            metadata: { total_reviews_input: 2, total_processed: 2 },
-            reviews: [
-                { review_id: 'r1', content: 'app keeps crashing always', score: 1 },
-                { review_id: 'r2', content: 'this is a good app for card controls!', score: 5 }
-            ]
+    loadReviews: vi.fn().mockResolvedValue({
+        reviews: [
+            { review_id: 'r1', content: 'app keeps crashing always', score: 1 },
+            { review_id: 'r2', content: 'this is a good app for card controls!', score: 5 }
+        ],
+        diagnostics: {
+            total_reviews_input: 2,
+            filtered_spam: 0,
+            invalid_rows_dropped: 0,
+            duplicates_dropped: 0,
+            spam_ratio: 0
         }
     })
 }));

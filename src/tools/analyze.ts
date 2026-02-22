@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SourceSchema } from '../schemas/shared.js';
-import { importReviews } from './import.js';
+import { loadReviews } from './import.js';
 import { evaluateRules } from '../engine/rules.js';
 import { isLlmRequired } from '../engine/routing.js';
 import { CircuitBreaker } from '../engine/circuitBreaker.js';
@@ -35,9 +35,9 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     }
 
     const { source, options } = parseResult.data;
-    const { vectorStore, llmClient } = deps;
-    const importRes = await importReviews({ source }, vectorStore);
-    const rawInputReviews = importRes.data.reviews;
+    const { llmClient } = deps;
+    const loaded = await loadReviews({ source });
+    const rawInputReviews = loaded.reviews;
 
     const startTime = Date.now();
     const cb = new CircuitBreaker();
