@@ -32,6 +32,29 @@ export interface AnalyzeDeps {
     llmClient: ILLMClient;
 }
 
+const FALLBACK_ROUTING_MODEL = "claude-3-haiku-20240307";
+const FALLBACK_SUMMARY_MODEL = "claude-3-5-sonnet-20241022";
+
+function resolveModelDefaults(options?: z.infer<typeof AnalyzeOptionsSchema>) {
+    if (options?.routing_model && options?.summary_model) {
+        return { routing: options.routing_model, summary: options.summary_model };
+    }
+
+    try {
+        const providerDefaults = resolveLlmProviderConfig(getConfig());
+        return {
+            routing: options?.routing_model || providerDefaults.routing_model,
+            summary: options?.summary_model || providerDefaults.summary_model
+        };
+    } catch {
+        // Tests and offline runs can inject llmClient without env keys.
+        return {
+            routing: options?.routing_model || FALLBACK_ROUTING_MODEL,
+            summary: options?.summary_model || FALLBACK_SUMMARY_MODEL
+        };
+    }
+}
+
 export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
@@ -57,11 +80,7 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     let rate_limit_count = 0;
     let budget_guardrail_count = 0;
 
-    const providerDefaults = resolveLlmProviderConfig(getConfig());
-    const models_used = {
-        routing: options?.routing_model || providerDefaults.routing_model,
-        summary: options?.summary_model || providerDefaults.summary_model
-    };
+    const models_used = resolveModelDefaults(options);
 
     const finalReviews = [];
     const safety_alerts = [];

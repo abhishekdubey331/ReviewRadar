@@ -22,6 +22,8 @@ const SummarizeToolInputSchema = z.object({
     reviews: z.array(z.union([AnalyzedReviewSchema, LegacySummarizeReviewSchema])).max(5000)
 });
 
+const FALLBACK_SUMMARY_MODEL = "claude-3-5-sonnet-20241022";
+
 export async function summarizeReviews(
     reviews: SummarizeReviewInput[],
     llmClient: ILLMClient,
@@ -89,7 +91,12 @@ export async function summarizeTool(input: unknown, llmClient: ILLMClient) {
         throw createError("INVALID_SCHEMA", "Invalid summarize parameters", parseResult.error.format());
     }
 
-    const defaultModel = resolveLlmProviderConfig(getConfig()).summary_model;
+    let defaultModel = FALLBACK_SUMMARY_MODEL;
+    try {
+        defaultModel = resolveLlmProviderConfig(getConfig()).summary_model;
+    } catch {
+        // Allows deterministic unit tests without env provider keys.
+    }
     const res = await summarizeReviews(parseResult.data.reviews, llmClient, defaultModel);
     return { data: res };
 }
