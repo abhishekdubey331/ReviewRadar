@@ -61,6 +61,14 @@ npm run scrape
 npm run build
 ```
 
+### 4. Storage behavior
+
+`reviews_import` persists local vector search artifacts to:
+- `storage/vector_index.json`
+- `storage/metadata.json`
+
+These files are reused across process restarts. Ensure your deployment has writable disk access for `storage/`.
+
 ---
 
 ## 🔌 Connecting an MCP Client

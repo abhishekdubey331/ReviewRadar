@@ -1,9 +1,9 @@
-# System Architecture: Greenlight Review Intelligence MCP
+# System Architecture: ReviewRadar MCP
 
-This document maps out the data flow and system boundaries of the stateless `v1.0` architecture. 
+This document maps out the data flow and system boundaries of the `v1.0` architecture.
 
 ## 1. High-Level MCP Context Boundary
-The MCP server operates as an isolated, stateless background process. It communicates with host applications (like Cursor or Claude Desktop) entirely via standard I/O (`stdio`) using the JSON-RPC protocol defined by the MCP spec.
+The MCP server operates as an isolated background process. It communicates with host applications (like Cursor or Claude Desktop) entirely via standard I/O (`stdio`) using the JSON-RPC protocol defined by the MCP spec.
 
 ```mermaid
 sequenceDiagram
@@ -52,7 +52,9 @@ flowchart TD
     M --> N[Return to Host LLM]
 ```
 
-## 3. Deployment & State
+## 3. Deployment, State, and Storage
 
-*   **State:** The server holds **0 megabytes** of state between requests. All history, tracking, and comparison must be managed by the Host Client.
-*   **Security:** Raw text entering Node.js memory is scrubbed at step `D`. By step `J` (where data leaves the local machine to hit OpenAI/Anthropic), it is guaranteed chemically clean of PII.
+*   **Process State:** Request handling is stateless at the MCP protocol layer.
+*   **Persistent Local Storage:** Vector index artifacts are persisted to `storage/vector_index.json` and `storage/metadata.json` when imports run. This allows search and diagnostics across process restarts.
+*   **Operational Implication:** Deployments must provide writable disk for `storage/` and include cleanup/backup policy for local index files.
+*   **Security Boundary:** Raw text entering Node.js memory is scrubbed before LLM calls. Logs should avoid raw review text and should use IDs/counts for diagnostics.
