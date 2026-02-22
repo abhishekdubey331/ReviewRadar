@@ -11,6 +11,11 @@ import { exportTool } from "./tools/export.js";
 import { topIssuesTool } from "./tools/top_issues.js";
 import { segmentBreakdownTool } from "./tools/segment_breakdown.js";
 import { timeTrendsTool } from "./tools/time_trends.js";
+import { compareWindowsTool } from "./tools/compare_windows.js";
+import { spikeDetectionTool } from "./tools/spike_detection.js";
+import { priorityScoringTool } from "./tools/priority_scoring.js";
+import { featureOwnershipMapTool } from "./tools/feature_ownership_map.js";
+import { weeklyReportTool } from "./tools/weekly_report.js";
 import { VoyVectorStore } from "./infrastructure/adapters/voy_vector_store.js";
 import { ConcurrentLLMClient } from "./engine/llmClient.js";
 
@@ -157,6 +162,69 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                 }
             },
             {
+                name: "reviews_compare_windows",
+                description: "Compare baseline and current review windows for regressions and improvements.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        baseline_reviews: { type: "array", items: { type: "object" } },
+                        current_reviews: { type: "array", items: { type: "object" } },
+                        options: { type: "object" }
+                    },
+                    required: ["baseline_reviews", "current_reviews"]
+                }
+            },
+            {
+                name: "reviews_spike_detection",
+                description: "Detect issue spikes in the most recent day/week bucket.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: { type: "array", items: { type: "object" } },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews"]
+                }
+            },
+            {
+                name: "reviews_priority_scoring",
+                description: "Rank issue clusters by impact score for roadmap prioritization.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: { type: "array", items: { type: "object" } },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews"]
+                }
+            },
+            {
+                name: "reviews_feature_ownership_map",
+                description: "Map issue clusters to squads and owners using provided ownership rules.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: { type: "array", items: { type: "object" } },
+                        ownership_rules: { type: "array", items: { type: "object" } },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews", "ownership_rules"]
+                }
+            },
+            {
+                name: "reviews_weekly_report",
+                description: "Generate weekly PM report with top issues, spikes, priorities, and ownership assignments.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        reviews: { type: "array", items: { type: "object" } },
+                        ownership_rules: { type: "array", items: { type: "object" } },
+                        options: { type: "object" }
+                    },
+                    required: ["reviews"]
+                }
+            },
+            {
                 name: "reviews_search",
                 description: "Semantically search through imported reviews using a natural language query with optional filtering and sorting.",
                 inputSchema: {
@@ -250,6 +318,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
 
         if (request.params.name === "reviews_time_trends") {
             const data = await timeTrendsTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_compare_windows") {
+            const data = await compareWindowsTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_spike_detection") {
+            const data = await spikeDetectionTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_priority_scoring") {
+            const data = await priorityScoringTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_feature_ownership_map") {
+            const data = await featureOwnershipMapTool(request.params.arguments);
+            return {
+                content: [{ type: "text", text: JSON.stringify(data) }]
+            };
+        }
+
+        if (request.params.name === "reviews_weekly_report") {
+            const data = await weeklyReportTool(request.params.arguments);
             return {
                 content: [{ type: "text", text: JSON.stringify(data) }]
             };
