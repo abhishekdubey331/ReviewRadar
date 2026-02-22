@@ -16,10 +16,10 @@ export default defineConfig({
             'src/domain/ports/**/*.ts'
         ],
         thresholds: {
-            lines: 60,
-            functions: 40,
-            branches: 40,
-            statements: 60,
+            lines: 75,
+            functions: 90,
+            branches: 65,
+            statements: 75,
             perFile: true
         }
     }

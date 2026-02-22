@@ -16,6 +16,7 @@ Thanks for considering a contribution.
 - Add tests for behavioral changes.
 - Preserve MCP response contracts unless explicitly versioned.
 - Avoid unrelated formatting churn.
+- Follow `docs/release_checklist.md` for release-affecting changes.
 
 ## Reporting issues
 Please include:
