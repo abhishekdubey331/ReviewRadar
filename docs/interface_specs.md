@@ -352,7 +352,109 @@ All tools return either data or error (never both).
 ### 3) reviews.get_safety_alerts
 *Same input as `reviews.analyze`, but returns ONLY metadata + `safety_alerts`.*
 
-### 4) reviews.reply_suggest
+### 4) reviews.top_issues (`reviews_top_issues` in current runtime)
+```json
+{
+  "$id": "reviews.top_issues.schema.json",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "review_id": { "type": "string" },
+          "issue_type": { "$ref": "shared.types.schema.json#/definitions/IssueType" },
+          "feature_area": { "$ref": "shared.types.schema.json#/definitions/FeatureArea" },
+          "severity": { "$ref": "shared.types.schema.json#/definitions/Severity" },
+          "sentiment": { "$ref": "shared.types.schema.json#/definitions/Sentiment" },
+          "review_created_at": { "type": "string" },
+          "score": { "type": "integer", "minimum": 1, "maximum": 5 }
+        },
+        "required": ["review_id", "issue_type", "feature_area"],
+        "additionalProperties": true
+      }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "start_date": { "type": "string" },
+            "end_date": { "type": "string" },
+            "severities": { "type": "array", "items": { "type": "string" } },
+            "sentiments": { "type": "array", "items": { "type": "string" } },
+            "feature_areas": { "type": "array", "items": { "type": "string" } },
+            "issue_types": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["reviews"],
+  "additionalProperties": false
+}
+```
+
+### 5) reviews.segment_breakdown (`reviews_segment_breakdown` in current runtime)
+```json
+{
+  "$id": "reviews.segment_breakdown.schema.json",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "enum": ["app_version", "os_version", "device", "locale", "platform", "rating_bucket"]
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "filters": { "type": "object" }
+      },
+      "required": ["dimension"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["reviews", "options"],
+  "additionalProperties": false
+}
+```
+
+### 6) reviews.time_trends (`reviews_time_trends` in current runtime)
+```json
+{
+  "$id": "reviews.time_trends.schema.json",
+  "type": "object",
+  "properties": {
+    "reviews": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "bucket": { "type": "string", "enum": ["day", "week"], "default": "week" },
+        "top_issue_limit": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
+        "filters": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["reviews"],
+  "additionalProperties": false
+}
+```
+
+### 7) reviews.reply_suggest
 ```json
 {
   "$id": "reviews.reply_suggest.schema.json",
@@ -385,7 +487,7 @@ All tools return either data or error (never both).
 }
 ```
 
-### 5) Error response (all tools)
+### 8) Error response (all tools)
 ```json
 {
   "type": "object",
@@ -396,3 +498,6 @@ All tools return either data or error (never both).
   "additionalProperties": false
 }
 ```
+
+## Runtime Naming Note
+The current server runtime uses underscore tool names (for example `reviews_top_issues`) while parts of this spec use dotted naming (for example `reviews.top_issues`). Keep your MCP client aligned to the runtime names listed by `ListTools` until naming is unified.
