@@ -1,91 +1,219 @@
-# ReviewRadar
+# 🚨 ReviewRadar
 
-<p align="left">
-  <strong>Turn raw app-store feedback into prioritized product intelligence.</strong><br/>
-  ReviewRadar is an MCP server that ingests mobile reviews, indexes them, and produces actionable issue insights for teams shipping fast.
-</p>
+**Turn raw App Store reviews into prioritized product intelligence.**
 
-![Node >=18](https://img.shields.io/badge/node-%3E%3D18-3C873A?logo=node.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-5.x-3178C6?logo=typescript&logoColor=white)
-![MCP](https://img.shields.io/badge/MCP-server-111827)
-![License MIT](https://img.shields.io/badge/license-MIT-2563EB)
+ReviewRadar is an **MCP server** that ingests mobile app reviews, indexes them, and converts them into **actionable product insights** for teams shipping fast.
 
-## Why ReviewRadar
-- Collects reviews from Google Play and Apple App Store pipelines.
-- Blends deterministic rules with optional LLM analysis for stable, explainable results.
-- Redacts PII before LLM calls.
-- Detects business-critical (P0/P1) alerts early via `reviews_get_critical_alerts`.
-- Enables semantic search, trend analysis, prioritization, and export-ready summaries.
+Instead of manually reading thousands of reviews, ReviewRadar helps detect **critical issues, trends, and product priorities automatically.**
 
-## What You Get
-- **Ingestion + indexing:** import reviews and persist searchable vector artifacts.
-- **Fast triage:** identify top issues, spikes, and ownership areas.
-- **Time-aware insights:** compare windows and monitor trend movement.
-- **Delivery-ready outputs:** produce markdown/Jira-friendly reporting payloads.
-- **Broader issue taxonomy:** Bug, Performance, UX, Account/Auth, Payments/Transactions, Billing/Pricing, Trust/Fraud, Support/Service, Cancellation/Retention, Data/Sync, Safety Concern, Feature Request, Praise.
+---
 
-## Architecture At A Glance
+# ✨ Why ReviewRadar
+
+Product teams drown in app reviews.
+
+ReviewRadar turns messy feedback into:
+
+⚡ **Critical alerts** for business-breaking issues  
+📊 **Trend analysis** across weeks or releases  
+🔎 **Semantic search** across thousands of reviews  
+🎯 **Prioritized issue insights** for sprint planning  
+📄 **Export-ready reports** for PMs and leadership  
+
+All while **redacting PII before any LLM processing**.
+
+---
+
+# 🧠 What It Does
+
+ReviewRadar collects reviews from mobile app stores and transforms them into **structured product intelligence**.
+
+Key capabilities:
+
+- 📥 Import reviews from **Google Play** and **Apple App Store**
+- 🧠 Hybrid analysis using **rules + optional LLM insights**
+- 🔒 **PII redaction** before LLM processing
+- 🚨 Detect **P0/P1 critical customer issues**
+- 📊 Identify **top product pain points**
+- 📈 Monitor **issue trends over time**
+- 🔍 **Semantic search** across reviews
+- 📤 Export **PM-ready summaries and reports**
+
+---
+
+# 🏷 Issue Taxonomy
+
+ReviewRadar classifies feedback into meaningful product categories:
+
+- 🐞 Bug
+- ⚡ Performance
+- 🎨 UX
+- 🔐 Account / Authentication
+- 💳 Payments / Transactions
+- 💰 Billing / Pricing
+- 🛡 Trust / Fraud
+- 📞 Support / Service
+- ❌ Cancellation / Retention
+- 🔄 Data / Sync
+- 🚨 Safety Concern
+- 💡 Feature Request
+- ❤️ Praise
+
+---
+
+# 📊 Example Output
+
+Example weekly product report generated from app reviews:
+
 ```text
-App Stores -> Scrape/Import -> Vector + Metadata Storage -> Analysis Engine -> MCP Tools -> IDE/Agent Client
+Top Issues This Week
+
+P0 – Login failures (124 reports)
+P0 – Payment errors during checkout (78 reports)
+P1 – App crashes on Android 14 (63 reports)
+
+Trend Changes
+
+Billing complaints ↑ 45%
+Crash reports ↓ 20%
+
+Recommended Sprint Priorities
+
+1. Stabilize login retry flow
+2. Fix checkout payment failures
+3. Address Android 14 crash regression
 ```
 
-Primary storage artifacts:
-- `storage/vector_index.json`
-- `storage/metadata.json`
+This gives product teams **immediate insight into what to fix next.**
 
-## Quick Start
+---
+
+# ⚡ Quick Start
+
+Clone the repository:
+
 ```bash
 git clone https://github.com/<your-org-or-user>/ReviewRadar.git
 cd ReviewRadar
+```
+
+Install dependencies:
+
+```bash
 npm install
+```
+
+Create environment file:
+
+```bash
 cp .env.example .env
 ```
 
-Set minimum required environment variables:
-```env
+Set required environment variables:
+
+```bash
 APP_LINK=https://play.google.com/store/apps/details?id=com.example.app
 SUPPORT_BRAND_NAME=your app
-OPENAI_API_KEY=sk-...       # required for analysis + embeddings/search
+OPENAI_API_KEY=sk-...
 ```
-Current provider support: OpenAI only.
 
-Run end-to-end:
+Run the full pipeline:
+
 ```bash
 npm run scrape
 npm run build
 npm start
 ```
 
-## Connect As MCP Server
-Entrypoint:
+---
+
+# 🔌 Connect As MCP Server
+
+Entry point:
+
 ```bash
 node /absolute/path/to/ReviewRadar/dist/index.js
 ```
 
-Use that command in your MCP client config (Cursor/other MCP-compatible clients).
+Use this command in your **MCP client configuration** (Cursor or other MCP-compatible tools).
 
-## Tooling Surface
-Full tool-by-tool details (purpose, sample prompt, expected output) are documented here:
+---
 
-- [Tooling Surface Guide](docs/tooling_surface.md)
+# 🧰 Example Product Questions
 
-## PM Prompt Cookbook
-Use natural language. You do not need to reference MCP tool names.
-For PM summary asks (top pain points/counts/severity), prefer `reviews_top_issues` flows over parsing raw `reviews_analyze` output.
+ReviewRadar allows natural-language product analysis.
 
-- Import the latest app reviews and tell me if the data is ready for analysis.
-- What are the most critical customer issues right now that need immediate escalation?
-- Give me the top customer pain points this week with counts and severity.
-- Compare this week vs last week and tell me what got worse or better.
-- Show me trends over the last 8 weeks and call out rising problems.
-- Did any issue spike recently? Tell me what likely caused it.
-- Prioritize the top 10 issues for next sprint and explain why.
-- Which app versions or platforms are causing the most complaints?
-- Map current issues to likely owning teams and flag anything unowned.
-- Generate a PM weekly report I can paste to leadership.
-- Show me the full review text behind the "Unknown (unclassified issues)" cluster for the last 30 days.
+Examples:
 
-## Development
+**Import latest reviews**
+
+```text
+Import the latest app reviews and tell me if the data is ready for analysis.
+```
+
+**Critical issue detection**
+
+```text
+What are the most critical customer issues right now that need escalation?
+```
+
+**Weekly insights**
+
+```text
+Give me the top customer pain points this week with counts and severity.
+```
+
+**Trend monitoring**
+
+```text
+Show me trends over the last 8 weeks and call out rising problems.
+```
+
+**Sprint prioritization**
+
+```text
+Prioritize the top 10 issues for the next sprint.
+```
+
+**Leadership report**
+
+```text
+Generate a PM weekly report I can paste to leadership.
+```
+
+---
+
+# 🏗 Architecture
+
+High-level pipeline:
+
+```text
+App Stores
+↓
+Scrape / Import
+↓
+Vector + Metadata Storage
+↓
+Analysis Engine
+↓
+MCP Tools
+↓
+IDE / Agent Client
+```
+
+Primary storage artifacts:
+
+```text
+storage/vector_index.json
+storage/metadata.json
+```
+
+---
+
+# 🧪 Development
+
+Run development checks:
+
 ```bash
 npm run lint
 npm run test
@@ -93,17 +221,49 @@ npm run verify
 npm run build
 ```
 
-Additional docs:
-- Setup: `docs/setup_guide.md`
-- Architecture: `docs/architecture.md`
-- Testing standards: `docs/testing_guidelines.md`
-- Contribution process: `CONTRIBUTING.md`
-- Security policy: `SECURITY.md`
+---
 
-## Roadmap Ideas
-- Provider-agnostic embeddings
-- Dashboard-ready trend API outputs
-- Expanded issue taxonomy and auto-clustering
+# 📚 Documentation
 
-## License
-MIT. See `LICENSE`.
+Additional documentation:
+
+- Setup Guide → docs/setup_guide.md  
+- Architecture → docs/architecture.md  
+- Testing Standards → docs/testing_guidelines.md  
+- Contribution Guide → CONTRIBUTING.md  
+- Security Policy → SECURITY.md  
+
+---
+
+# 🗺 Roadmap
+
+Future improvements:
+
+- 🔌 Provider-agnostic embeddings
+- 📊 Dashboard-ready trend APIs
+- 🧠 Advanced clustering of review issues
+- 📈 Long-term release impact analysis
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+Steps:
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+---
+
+# 📜 License
+
+MIT License.
+
+See `LICENSE` for details.
+
+---
+
+⭐ If this project helps you understand customer feedback faster, consider starring the repo!
