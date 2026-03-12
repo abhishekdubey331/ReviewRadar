@@ -12,7 +12,8 @@ Instead of manually reading thousands of reviews, ReviewRadar helps detect **cri
 
 Want to see ReviewRadar in action before setup? Watch the demo here:
 
-**[Watch the product demo](REPLACE_WITH_DEMO_VIDEO_URL)**
+[Watch the product demo](https://github.com/user-attachments/assets/f2b9da84-bf44-4c82-b82b-a1f8cd6b582a)
+
 
 Recommended: upload the video to **GitHub assets, Loom, YouTube, or Drive** and paste the public link above.  
 Do not link to a local Desktop file in the README because GitHub cannot open files from your machine.
