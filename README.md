@@ -8,6 +8,24 @@ Instead of manually reading thousands of reviews, ReviewRadar helps detect **cri
 
 ---
 
+# 🎥 Demo Video
+
+Want to see ReviewRadar in action before setup? Watch the demo here:
+
+**[Watch the product demo](REPLACE_WITH_DEMO_VIDEO_URL)**
+
+Recommended: upload the video to **GitHub assets, Loom, YouTube, or Drive** and paste the public link above.  
+Do not link to a local Desktop file in the README because GitHub cannot open files from your machine.
+
+The demo should ideally show:
+
+- importing reviews
+- surfacing critical alerts
+- querying the MCP server in Cursor
+- generating product-ready insights from raw reviews
+
+---
+
 # ✨ Why ReviewRadar
 
 Product teams drown in app reviews.
