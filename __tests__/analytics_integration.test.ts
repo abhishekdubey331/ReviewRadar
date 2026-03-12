@@ -14,6 +14,7 @@ vi.mock("../src/tools/import.js", () => ({
         diagnostics: {
             total_reviews_input: 3,
             filtered_spam: 0,
+            discarded_rows: 0,
             invalid_rows_dropped: 0,
             duplicates_dropped: 0,
             spam_ratio: 0

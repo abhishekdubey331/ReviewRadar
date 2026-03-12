@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error JavaScript scraper helpers are imported directly for unit coverage.
-import { normalizeReviewDate, toCsvRows } from '../scripts/scrape.js';
+import { detectStoreProvider, extractStoreAppId, normalizeReviewDate, toCsvRows } from '../scripts/scrape_helpers.js';
 
 describe('scrape helpers', () => {
     it('normalizes known review date fields', () => {
@@ -24,5 +24,17 @@ describe('scrape helpers', () => {
 
         expect(rows).toHaveLength(2);
         expect(rows[1]).toContain('2025-01-01T00:00:00.000Z');
+    });
+
+    it('detects provider and extracts Play Store app id', () => {
+        const appLink = 'https://play.google.com/store/apps/details?id=com.example.app';
+        expect(detectStoreProvider(appLink)).toBe('play_store');
+        expect(extractStoreAppId(appLink, 'play_store')).toBe('com.example.app');
+    });
+
+    it('detects provider and extracts App Store app id', () => {
+        const appLink = 'https://apps.apple.com/us/app/example-app/id1234567890';
+        expect(detectStoreProvider(appLink)).toBe('app_store');
+        expect(extractStoreAppId(appLink, 'app_store')).toBe('1234567890');
     });
 });

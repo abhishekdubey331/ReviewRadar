@@ -10,11 +10,20 @@ import { AppError } from "./utils/errors.js";
 import { resolveStorageDir } from "./utils/config.js";
 import { logger } from "./utils/logger.js";
 import crypto from "crypto";
+import { resolveLlmProviderConfig } from "./utils/config.js";
 
 function buildRuntimeDeps() {
     // Validate configuration once at the composition root before creating dependencies.
     const config = getConfig();
+    const modelDefaults = resolveLlmProviderConfig(config);
     return {
+        promptContext: {
+            supportBrandName: config.SUPPORT_BRAND_NAME
+        },
+        modelDefaults: {
+            routing: modelDefaults.routing_model,
+            summary: modelDefaults.summary_model
+        },
         vectorStore: new VoyVectorStore({
             storageDir: resolveStorageDir(config.STORAGE_DIR),
             embeddingApiKey: config.OPENAI_API_KEY

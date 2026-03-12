@@ -4,37 +4,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { detectStoreProvider, extractStoreAppId, mapScrapedReview, toCsvRows } from './scrape_helpers.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-export function normalizeReviewDate(review) {
-    const raw = review?.date ?? review?.updated ?? review?.updatedAt ?? review?.created ?? review?.createdAt;
-    const parsed = raw ? new Date(raw) : new Date();
-    return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
-}
-
-export function toCsvRows(reviewsData, platformName) {
-    const csvRows = ['review_id,platform,user_name,content,score,app_version,device,os_version,review_created_at'];
-
-    for (const review of reviewsData) {
-        const id = review.id;
-        const platform = platformName;
-        const user_name = `"${(review.userName || 'Anonymous').replace(/"/g, '""')}"`;
-        const content = `"${(review.text || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`;
-        const score = review.score;
-        const version = review.version || 'Unknown';
-        const device = 'Unknown';
-        const osVersion = 'Unknown';
-        const createdAt = normalizeReviewDate(review);
-
-        csvRows.push(`${id},${platform},${user_name},${content},${score},${version},${device},${osVersion},${createdAt}`);
-    }
-
-    return csvRows;
-}
 
 export async function scrapeReviews() {
     const appLink = process.env.APP_LINK;
@@ -45,53 +20,25 @@ export async function scrapeReviews() {
     console.log(`Scraping top recent reviews for App Link: ${appLink}`);
 
     let reviewsData = [];
-    let platformName = '';
+    const platformName = detectStoreProvider(appLink);
+    const appId = extractStoreAppId(appLink, platformName);
 
-    if (appLink.includes('play.google.com')) {
-        platformName = 'play_store';
-        const parsedUrl = new URL(appLink);
-        const appId = parsedUrl.searchParams.get('id');
-
-        if (!appId) throw new Error("Could not extract 'id' from Play Store URL.");
-
+    if (platformName === 'play_store') {
         console.log(`Detected Google Play Store URL. App ID: ${appId}`);
         const results = await gplay.reviews({
             appId,
             sort: gplay.sort.NEWEST,
             num: 50000
         });
-
-        reviewsData = results.data.map((review) => ({
-            id: review.id,
-            userName: review.userName,
-            text: review.text,
-            score: review.score,
-            version: review.version,
-            date: review.date
-        }));
-    } else if (appLink.includes('apps.apple.com')) {
-        platformName = 'app_store';
-        const match = appLink.match(/\/id(\d+)/);
-        if (!match || !match[1]) throw new Error('Could not extract numeric ID from App Store URL.');
-        const appId = match[1];
-
+        reviewsData = results.data.map(mapScrapedReview);
+    } else if (platformName === 'app_store') {
         console.log(`Detected Apple App Store URL. App ID: ${appId}`);
         const results = await appStore.reviews({
             appId,
             sort: appStore.sort.RECENT,
             page: 1
         });
-
-        reviewsData = results.map((review) => ({
-            id: review.id,
-            userName: review.userName,
-            text: review.text,
-            score: review.score,
-            version: review.version,
-            date: review.date ?? review.updated ?? review.updatedAt ?? review.createdAt
-        }));
-    } else {
-        throw new Error("Unsupported APP_LINK format. Must contain 'play.google.com' or 'apps.apple.com'.");
+        reviewsData = results.map(mapScrapedReview);
     }
 
     console.log(`Successfully scraped ${reviewsData.length} reviews.`);

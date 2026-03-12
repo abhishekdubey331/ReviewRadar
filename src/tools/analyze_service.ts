@@ -4,6 +4,7 @@ import { CircuitBreaker } from "../engine/circuitBreaker.js";
 import { ILLMClient, LLMResponse } from "../domain/ports/llm_client.js";
 import { AnalyzedReviewSchema } from "../schemas/shared.js";
 import { redactPII } from "../utils/redact.js";
+import { collapseWhitespace } from "../utils/text.js";
 
 export interface LoadedReview {
     review_id: string;
@@ -42,6 +43,10 @@ export type ReviewProcessingResult =
         output: ClassificationOutput;
         fallback_reason: FallbackReason;
     };
+
+export interface AnalysisPromptContext {
+    supportBrandName?: string;
+}
 
 function firstTextContent(resp: LLMResponse): string {
     if (Array.isArray(resp.content) && resp.content[0]?.type === "text") {
@@ -82,7 +87,8 @@ export async function processSingleReview(
     routingModel: string,
     circuitBreaker: CircuitBreaker,
     budgetUsd?: number,
-    forceRuleOnly: boolean = false
+    forceRuleOnly: boolean = false,
+    promptContext?: AnalysisPromptContext
 ): Promise<ReviewProcessingResult> {
     const redacted = redactPII(review.content);
     const rulesRes = evaluateRules(redacted, review.score);
@@ -123,7 +129,10 @@ export async function processSingleReview(
     }
 
     try {
-        const prompt = `Classify this review (return JSON with feature_area, issue_type, severity):\nReview: ${redacted}`;
+        const brandLine = promptContext?.supportBrandName
+            ? `The review is about the product "${collapseWhitespace(promptContext.supportBrandName)}".\n`
+            : "";
+        const prompt = `${brandLine}Classify this app review into the existing product taxonomy and return strict JSON with keys feature_area, issue_type, severity.\nUse the product context when the review refers to the app generically as "app" or "service".\nReview: ${redacted}`;
         const llmResp = await llmClient.processPrompt(prompt, routingModel);
         const parsed = parseLlmClassification(firstTextContent(llmResp));
 

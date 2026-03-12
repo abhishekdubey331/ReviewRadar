@@ -14,15 +14,20 @@ import { weeklyReportTool } from "../tools/weekly_report.js";
 import { clusterReviewsTool } from "../tools/cluster_reviews.js";
 import { getConfigDiagnostics } from "../utils/config.js";
 import { createError } from "../utils/errors.js";
-import { AppError } from "../utils/errors.js";
 import { IVectorStore } from "../domain/ports/vector_store.js";
 import { ILLMClient } from "../domain/ports/llm_client.js";
 import { logger } from "../utils/logger.js";
-import { z } from "zod";
+import { AnalysisCache } from "../tools/analysis_cache.js";
+import { AnalysisPromptContext } from "../tools/analyze_service.js";
+import { AnalyzeModelDefaults } from "../tools/analyze_models.js";
+import { adaptDispatcherError, asRecord, asTextResponse, ensureAnalyzedReviewsInArgs, ensureTopIssuesWindow, hasInternalAnalyzeOptions, resolveTopIssuesMinReviewTarget, SearchToolArgsSchema } from "./tool_dispatcher_helpers.js";
 
 export interface DispatcherDeps {
     vectorStore: IVectorStore;
     llmClient: ILLMClient;
+    promptContext?: AnalysisPromptContext;
+    analysisCache?: AnalysisCache;
+    modelDefaults?: AnalyzeModelDefaults;
 }
 
 export interface DispatchContext {
@@ -52,171 +57,7 @@ const TOOLS_REQUIRING_ANALYZED_REVIEWS = new Set([
     "reviews_cluster_reviews"
 ]);
 
-async function ensureAnalyzedReviewsInArgs(args: unknown, deps: DispatcherDeps, toolName: string) {
-    const argRecord = asRecord(args);
-    if (Array.isArray(argRecord.reviews) && argRecord.reviews.length > 0) {
-        return argRecord;
-    }
-
-    const analyzed = await analyzeReviewsTool({}, deps) as Record<string, unknown>;
-    const analyzedData = asRecord(analyzed.data);
-    const reviews = analyzedData.reviews;
-    if (!Array.isArray(reviews)) {
-        throw createError("INTERNAL", `Unable to auto-resolve analyzed reviews for ${toolName}`);
-    }
-
-    return { ...argRecord, reviews };
-}
-
-async function ensureAnalyzedReviewsInArgsWithAnalyzeInput(
-    args: unknown,
-    deps: DispatcherDeps,
-    toolName: string,
-    analyzeInput: Record<string, unknown>
-) {
-    const argRecord = asRecord(args);
-    if (Array.isArray(argRecord.reviews) && argRecord.reviews.length > 0) {
-        return argRecord;
-    }
-
-    const analyzed = await analyzeReviewsTool(analyzeInput, deps) as Record<string, unknown>;
-    const analyzedData = asRecord(analyzed.data);
-    const reviews = analyzedData.reviews;
-    if (!Array.isArray(reviews)) {
-        throw createError("INTERNAL", `Unable to auto-resolve analyzed reviews for ${toolName}`);
-    }
-
-    return { ...argRecord, reviews };
-}
-
-function isMissingRequiredReviews(details: unknown): boolean {
-    const detailsRecord = asRecord(details);
-    const reviewsNode = asRecord(detailsRecord.reviews);
-    const errors = reviewsNode._errors;
-    return Array.isArray(errors) && errors.some((err) => String(err).toLowerCase().includes("required"));
-}
-
-function asTextResponse(data: unknown) {
-    return { content: [{ type: "text", text: JSON.stringify(data) }] };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-function ensureTopIssuesWindow(args: Record<string, unknown>) {
-    const options = asRecord(args.options);
-    const filters = asRecord(options.filters);
-    const hasDateRange = typeof filters.start_date === "string" || typeof filters.end_date === "string";
-    const hasWindow = typeof options.window === "string";
-
-    if (hasDateRange || hasWindow) {
-        return args;
-    }
-
-    return {
-        ...args,
-        options: {
-            ...options,
-            window: "this_week"
-        }
-    };
-}
-
-export function resolveTopIssuesMinReviewTarget(args: Record<string, unknown>): number {
-    const options = asRecord(args.options);
-    const filters = asRecord(options.filters);
-    const window = typeof options.window === "string" ? options.window : "this_week";
-
-    const fromWindow = (() => {
-        switch (window) {
-            case "this_week":
-            case "last_7_days":
-                return 100;
-            case "last_30_days":
-                return 500;
-            case "last_90_days":
-                return 1000;
-            case "last_180_days":
-                return 1500;
-            case "last_12_months":
-                return 2000;
-            default:
-                return 300;
-        }
-    })();
-
-    const startDateRaw = typeof filters.start_date === "string" ? Date.parse(filters.start_date) : Number.NaN;
-    const endDateRaw = typeof filters.end_date === "string" ? Date.parse(filters.end_date) : Number.NaN;
-    const referenceDateRaw = typeof options.reference_date === "string" ? Date.parse(options.reference_date) : Date.now();
-    const referenceDate = Number.isFinite(referenceDateRaw) ? referenceDateRaw : Date.now();
-    let days: number | null = null;
-
-    if (Number.isFinite(startDateRaw) && Number.isFinite(endDateRaw) && endDateRaw >= startDateRaw) {
-        days = Math.floor((endDateRaw - startDateRaw) / (24 * 60 * 60 * 1000)) + 1;
-    } else if (Number.isFinite(startDateRaw)) {
-        days = Math.floor((referenceDate - startDateRaw) / (24 * 60 * 60 * 1000)) + 1;
-    } else if (Number.isFinite(endDateRaw)) {
-        const fallbackStart = endDateRaw - (29 * 24 * 60 * 60 * 1000);
-        days = Math.floor((endDateRaw - fallbackStart) / (24 * 60 * 60 * 1000)) + 1;
-    }
-    if (days === null || days <= 0) return fromWindow;
-
-    if (days <= 7) return 100;
-    if (days <= 31) return 500;
-    if (days <= 90) return 1000;
-    if (days <= 180) return 1500;
-    return 2000;
-}
-
-function hasInternalAnalyzeOptions(args: unknown): boolean {
-    const argRecord = asRecord(args);
-    const options = asRecord(argRecord.options);
-    return "internal_max_reviews" in options || "internal_rule_only" in options;
-}
-
-const SearchToolArgsSchema = z.object({
-    query: z.string().max(1000).default(""),
-    limit: z.number().int().min(1).max(100).default(5),
-    min_score: z.number().min(1).max(5).optional(),
-    max_score: z.number().min(1).max(5).optional(),
-    start_date: z.string().min(1).optional(),
-    end_date: z.string().min(1).optional(),
-    sort_by: z.enum(["relevance", "date"]).default("relevance"),
-    sort_direction: z.enum(["asc", "desc"]).default("desc")
-}).refine((value) => {
-    if (value.min_score !== undefined && value.max_score !== undefined) {
-        return value.min_score <= value.max_score;
-    }
-    return true;
-}, {
-    message: "min_score must be less than or equal to max_score",
-    path: ["min_score"]
-}).refine((value) => {
-    if (value.start_date) {
-        return Number.isFinite(Date.parse(value.start_date));
-    }
-    return true;
-}, {
-    message: "start_date must be a valid date string",
-    path: ["start_date"]
-}).refine((value) => {
-    if (value.end_date) {
-        return Number.isFinite(Date.parse(value.end_date));
-    }
-    return true;
-}, {
-    message: "end_date must be a valid date string",
-    path: ["end_date"]
-}).refine((value) => {
-    if (value.start_date && value.end_date) {
-        return new Date(value.start_date).getTime() <= new Date(value.end_date).getTime();
-    }
-    return true;
-}, {
-    message: "start_date must be earlier than or equal to end_date",
-    path: ["start_date"]
-});
+export { resolveTopIssuesMinReviewTarget } from "./tool_dispatcher_helpers.js";
 
 const TOOL_HANDLERS: Record<string, ToolHandler> = {
     reviews_import: async ({ args, deps }) => {
@@ -251,7 +92,7 @@ const TOOL_HANDLERS: Record<string, ToolHandler> = {
     reviews_top_issues: async ({ args, deps }) => {
         const withWindow = ensureTopIssuesWindow(asRecord(args));
         const minReviews = resolveTopIssuesMinReviewTarget(withWindow);
-        const withReviews = await ensureAnalyzedReviewsInArgsWithAnalyzeInput(
+        const withReviews = await ensureAnalyzedReviewsInArgs(
             withWindow,
             deps,
             "reviews_top_issues",
@@ -308,17 +149,7 @@ export async function dispatchToolCall(name: string, args: unknown, deps: Dispat
         });
         return asTextResponse(data);
     } catch (error) {
-        const actionableError = error instanceof AppError
-            && error.code === "INVALID_SCHEMA"
-            && TOOLS_REQUIRING_ANALYZED_REVIEWS.has(name)
-            && isMissingRequiredReviews(error.details)
-            ? new AppError(
-                "INVALID_SCHEMA",
-                `${name} requires analyzed reviews in the \`reviews\` field. First run \`reviews_analyze\`, then pass \`result.data.reviews\` to ${name}.`,
-                error.details,
-                error
-            )
-            : error;
+        const actionableError = adaptDispatcherError(error, name, TOOLS_REQUIRING_ANALYZED_REVIEWS);
 
         logger.error("tool.dispatch.failed", {
             request_id: context.request_id,

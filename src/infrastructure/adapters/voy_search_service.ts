@@ -1,4 +1,6 @@
 import { VectorSearchOptions, VectorSearchResult } from "../../domain/ports/vector_store.js";
+import { tokenizeQuery } from "../../utils/text.js";
+import { HybridSearchRankingStrategy, SearchRankingStrategy } from "./search_ranking_strategy.js";
 
 export interface SearchNeighbor {
     id: string;
@@ -18,6 +20,7 @@ export interface SearchMetadata {
 interface SearchRecord extends VectorSearchResult {
     date?: string;
     score?: number;
+    lexical_score?: number;
 }
 
 function applyFilters(records: SearchRecord[], options: VectorSearchOptions): SearchRecord[] {
@@ -40,20 +43,13 @@ function applyFilters(records: SearchRecord[], options: VectorSearchOptions): Se
     return filtered;
 }
 
-function applySort(records: SearchRecord[], options: VectorSearchOptions): SearchRecord[] {
-    const { sort_by = "relevance", sort_direction = "desc" } = options;
+function applySort(
+    records: SearchRecord[],
+    options: VectorSearchOptions,
+    rankingStrategy: SearchRankingStrategy
+): SearchRecord[] {
     const sorted = [...records];
-
-    if (sort_by === "date") {
-        sorted.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date).getTime() : 0;
-            const dateB = b.date ? new Date(b.date).getTime() : 0;
-            return sort_direction === "desc" ? dateB - dateA : dateA - dateB;
-        });
-        return sorted;
-    }
-
-    sorted.sort((a, b) => a.relevance_rank - b.relevance_rank);
+    sorted.sort((a, b) => rankingStrategy.compare(a, b, options));
     return sorted;
 }
 
@@ -85,7 +81,72 @@ export function buildMetadataOnlyRecords(metadataById: Map<string, SearchMetadat
     }));
 }
 
-export function finalizeSearchResults(records: SearchRecord[], options: VectorSearchOptions): VectorSearchResult[] {
+export function buildLexicalSearchRecords(
+    metadataById: Map<string, SearchMetadata>,
+    query: string,
+    limit: number
+): SearchRecord[] {
+    const tokens = tokenizeQuery(query);
+    if (tokens.length === 0) return [];
+
+    const records = Array.from(metadataById.values())
+        .map((meta) => {
+            const haystack = `${meta.author || ""} ${meta.content || ""}`.toLowerCase();
+            const lexicalScore = tokens.reduce((score, token) => {
+                if (haystack.includes(token)) {
+                    return score + (haystack.includes(` ${token} `) ? 2 : 1);
+                }
+                return score;
+            }, 0);
+
+            return {
+                id: meta.id || "",
+                relevance_rank: Number.MAX_SAFE_INTEGER,
+                author: meta.author,
+                content: meta.content,
+                score: meta.score,
+                date: meta.date || meta.review_created_at,
+                lexical_score: lexicalScore
+            };
+        })
+        .filter((record) => record.id && (record.lexical_score ?? 0) > 0)
+        .sort((a, b) => {
+            const lexicalDelta = (b.lexical_score ?? 0) - (a.lexical_score ?? 0);
+            if (lexicalDelta !== 0) return lexicalDelta;
+            const dateA = a.date ? new Date(a.date).getTime() : 0;
+            const dateB = b.date ? new Date(b.date).getTime() : 0;
+            return dateB - dateA;
+        });
+
+    return records.slice(0, limit);
+}
+
+export function mergeSearchRecords(primary: SearchRecord[], supplemental: SearchRecord[]): SearchRecord[] {
+    const merged = new Map<string, SearchRecord>();
+
+    for (const record of [...primary, ...supplemental]) {
+        const existing = merged.get(record.id);
+        if (!existing) {
+            merged.set(record.id, record);
+            continue;
+        }
+
+        merged.set(record.id, {
+            ...existing,
+            ...record,
+            relevance_rank: Math.min(existing.relevance_rank, record.relevance_rank),
+            lexical_score: Math.max(existing.lexical_score ?? 0, record.lexical_score ?? 0)
+        });
+    }
+
+    return Array.from(merged.values());
+}
+
+export function finalizeSearchResults(
+    records: SearchRecord[],
+    options: VectorSearchOptions,
+    rankingStrategy: SearchRankingStrategy = new HybridSearchRankingStrategy()
+): VectorSearchResult[] {
     const limit = options.limit ?? 5;
-    return applySort(applyFilters(records, options), options).slice(0, limit);
+    return applySort(applyFilters(records, options), options, rankingStrategy).slice(0, limit);
 }

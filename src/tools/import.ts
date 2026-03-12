@@ -141,13 +141,15 @@ export async function loadReviews(input: unknown) {
     }
 
     const total_reviews_input = rawReviews.length;
-    const filtered_spam = total_reviews_input - uniqueReviews.length;
+    const filtered_spam = 0;
+    const discarded_rows = invalidRowsDropped + duplicatesDropped;
 
     return {
         reviews: uniqueReviews,
         diagnostics: {
             total_reviews_input,
             filtered_spam,
+            discarded_rows,
             invalid_rows_dropped: invalidRowsDropped,
             duplicates_dropped: duplicatesDropped,
             spam_ratio: total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0
@@ -162,6 +164,7 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
     const {
         total_reviews_input,
         filtered_spam,
+        discarded_rows,
         invalid_rows_dropped,
         duplicates_dropped,
         spam_ratio
@@ -188,6 +191,7 @@ export async function importReviews(input: unknown, vectorStore: IVectorStore) {
                 processed_at: new Date().toISOString(),
                 total_reviews_input,
                 filtered_spam,
+                discarded_rows,
                 invalid_rows_dropped,
                 duplicates_dropped,
                 spam_ratio,

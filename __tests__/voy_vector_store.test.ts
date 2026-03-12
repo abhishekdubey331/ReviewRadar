@@ -108,6 +108,26 @@ describe('VoyVectorStore', () => {
         expect(results[0].id).toBe('2'); // Newest first
     });
 
+    it('should supplement semantic retrieval with lexical matches for exact query terms', async () => {
+        (vectorStore as any).indexedMetadata = new Map([
+            ['1', { id: '1', score: 5, date: '2024-01-01', content: 'General praise without version mention' }],
+            ['2', { id: '2', score: 1, date: '2024-02-01', content: 'Crash on android 14 when opening the app' }],
+        ]);
+        (vectorStore as any).isInitialized = true;
+        (vectorStore as any).voy = new Voy();
+
+        (vectorStore as any).voy.search.mockReturnValue({
+            neighbors: [{ id: '1' }]
+        });
+
+        (OpenAI as any).mockImplementation(() => ({
+            embeddings: { create: vi.fn().mockResolvedValue({ data: [{ embedding: new Array(512).fill(0) }] }) }
+        }));
+
+        const results = await vectorStore.search('android 14', { limit: 5 });
+        expect(results.some((result) => result.id === '2')).toBe(true);
+    });
+
     it('should handle incremental indexing', async () => {
         (vectorStore as any).indexedMetadata = new Map([
             ['1', { id: '1' }]

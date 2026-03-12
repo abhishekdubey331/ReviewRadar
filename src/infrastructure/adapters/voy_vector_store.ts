@@ -5,9 +5,11 @@ import path from "path";
 import { IVectorStore, VectorSearchOptions, IndexStatus, ReviewRecord, VectorSearchResult, StorageDiagnostics } from "../../domain/ports/vector_store.js";
 import { EmbeddingClient, OpenAIEmbeddingClient } from "./openai_embedding_client.js";
 import { loadPersistedMetadata, loadVoyIndex, saveVoyState } from "./voy_persistence.js";
-import { buildMetadataOnlyRecords, buildSemanticSearchRecords, finalizeSearchResults } from "./voy_search_service.js";
 import { addEmbeddingsInBatches, indexReviewsInChunks } from "./voy_indexing_service.js";
 import { logger } from "../../utils/logger.js";
+import { HybridSearchRankingStrategy, SearchRankingStrategy } from "./search_ranking_strategy.js";
+import { buildVoyIndexStatus, clearVoyArtifacts } from "./voy_index_status.js";
+import { searchVoyIndex } from "./voy_query_engine.js";
 
 export class VoyVectorStore implements IVectorStore {
     private voy: Voy | null = null;
@@ -19,11 +21,13 @@ export class VoyVectorStore implements IVectorStore {
     private readonly storageDir: string;
     private readonly indexFile: string;
     private readonly metadataFile: string;
+    private readonly rankingStrategy: SearchRankingStrategy;
 
-    constructor(options?: { storageDir?: string; embeddingApiKey?: string; embeddingClient?: EmbeddingClient }) {
+    constructor(options?: { storageDir?: string; embeddingApiKey?: string; embeddingClient?: EmbeddingClient; rankingStrategy?: SearchRankingStrategy }) {
         this.storageDir = options?.storageDir ?? path.resolve(process.cwd(), "storage");
         this.indexFile = path.join(this.storageDir, "vector_index.json");
         this.metadataFile = path.join(this.storageDir, "metadata.json");
+        this.rankingStrategy = options?.rankingStrategy ?? new HybridSearchRankingStrategy();
         this.embeddingClient = options?.embeddingClient ?? new OpenAIEmbeddingClient({
             apiKey: options?.embeddingApiKey,
             dimensions: this.embeddingDimensions,
@@ -164,33 +168,20 @@ export class VoyVectorStore implements IVectorStore {
 
     async search(query: string, options: VectorSearchOptions = {}): Promise<VectorSearchResult[]> {
         await this.ensureInitialized();
-        const { limit = 5, sort_by = "relevance" } = options;
 
         if (!this.isInitialized || !this.voy) {
             throw createError("INTERNAL", "Vector store not initialized. Please import reviews first.");
         }
 
         try {
-            let filteredResults = [];
-
-            if (query && query !== "*" && query.trim() !== "") {
-                const embeddings = await this.embeddingClient.embed(query);
-                const queryEmbedding = new Float32Array(embeddings[0]);
-
-                const hasFilters =
-                    options.min_score !== undefined
-                    || options.max_score !== undefined
-                    || options.start_date
-                    || options.end_date
-                    || sort_by === "date";
-                const candidateLimit = hasFilters ? 5000 : limit * 2;
-                const results = this.voy.search(queryEmbedding, candidateLimit);
-                filteredResults = buildSemanticSearchRecords(results.neighbors, this.indexedMetadata);
-            } else {
-                filteredResults = buildMetadataOnlyRecords(this.indexedMetadata);
-            }
-
-            return finalizeSearchResults(filteredResults, options);
+            return await searchVoyIndex({
+                query,
+                options,
+                metadata: this.indexedMetadata,
+                embedQuery: async (value) => (await this.embeddingClient.embed(value))[0],
+                searchIndex: (embedding, limit) => this.voy!.search(embedding, limit),
+                rankingStrategy: this.rankingStrategy
+            });
         } catch (error: any) {
             logger.error("voy.search_failed", { message: error instanceof Error ? error.message : String(error) });
             throw createError("INTERNAL", "Failed to search reviews");
@@ -199,13 +190,7 @@ export class VoyVectorStore implements IVectorStore {
 
     async clear(): Promise<void> {
         if (this.voy) {
-            this.voy.clear();
-            if (fs.existsSync(this.indexFile)) {
-                fs.unlinkSync(this.indexFile);
-            }
-            if (fs.existsSync(this.metadataFile)) {
-                fs.unlinkSync(this.metadataFile);
-            }
+            clearVoyArtifacts(this.indexFile, this.metadataFile, () => this.voy!.clear());
         }
         this.indexedMetadata.clear();
         this.isInitialized = false;
@@ -213,29 +198,7 @@ export class VoyVectorStore implements IVectorStore {
 
     async getIndexStatus(): Promise<IndexStatus> {
         await this.ensureInitialized();
-        const total = this.indexedMetadata.size;
-        let withScore = 0;
-        let withDate = 0;
-
-        this.indexedMetadata.forEach(meta => {
-            if (meta.score !== undefined) withScore++;
-            if (meta.date || meta.review_created_at) withDate++;
-        });
-
-        return {
-            total_indexed: total,
-            metadata_health: {
-                has_score: total > 0 ? (withScore / total) : 0,
-                has_date: total > 0 ? (withDate / total) : 0,
-                score_count: withScore,
-                date_count: withDate
-            },
-            is_ready: total > 0 && withScore > 0,
-            storage_paths: {
-                index: this.indexFile,
-                metadata: this.metadataFile
-            }
-        };
+        return buildVoyIndexStatus(this.indexedMetadata, this.indexFile, this.metadataFile);
     }
 
     getStorageDiagnostics(): StorageDiagnostics {

@@ -9,9 +9,13 @@ import { ILLMClient } from '../domain/ports/llm_client.js';
 import { logger } from '../utils/logger.js';
 import { getRuntimePolicy } from '../utils/runtime_policy.js';
 import { getConfig, resolveLlmProviderConfig } from '../utils/config.js';
-import { buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
+import { AnalysisPromptContext, buildAnalyzedOutput, buildSafetyAlert, LoadedReview, processSingleReview } from './analyze_service.js';
 import { redactPII } from '../utils/redact.js';
 import { evaluateRules } from '../engine/rules.js';
+import { AnalysisCache, InMemoryAnalysisCache } from './analysis_cache.js';
+import { AnalyzeModelDefaults, resolveAnalyzeModelDefaults } from './analyze_models.js';
+import { buildAnalyzeWarnings, createAnalyzeCounters, trackAnalyzeResult } from './analyze_metrics.js';
+import { selectReviewsForAnalysis } from './analyze_selection.js';
 
 export const AnalyzeOptionsSchema = z.object({
     budget_usd: z.number().optional(),
@@ -37,28 +41,20 @@ export const AnalyzeToolInputSchema = z.object({
 export interface AnalyzeDeps {
     vectorStore: IVectorStore;
     llmClient: ILLMClient;
+    promptContext?: AnalysisPromptContext;
+    analysisCache?: AnalysisCache;
+    modelDefaults?: AnalyzeModelDefaults;
 }
 
-const FALLBACK_ROUTING_MODEL = "gpt-4o-mini";
-const FALLBACK_SUMMARY_MODEL = "gpt-4o";
-
 function resolveModelDefaults(options?: z.infer<typeof AnalyzeOptionsSchema>) {
-    if (options?.routing_model && options?.summary_model) {
-        return { routing: options.routing_model, summary: options.summary_model };
-    }
-
     try {
         const providerDefaults = resolveLlmProviderConfig(getConfig());
-        return {
-            routing: options?.routing_model || providerDefaults.routing_model,
-            summary: options?.summary_model || providerDefaults.summary_model
-        };
+        return resolveAnalyzeModelDefaults(options, {
+            routing: providerDefaults.routing_model,
+            summary: providerDefaults.summary_model
+        });
     } catch {
-        // Tests and offline runs can inject llmClient without env keys.
-        return {
-            routing: options?.routing_model || FALLBACK_ROUTING_MODEL,
-            summary: options?.summary_model || FALLBACK_SUMMARY_MODEL
-        };
+        return resolveAnalyzeModelDefaults(options);
     }
 }
 
@@ -76,43 +72,41 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const loaded = await loadReviews({ source });
     const allLoadedReviews = loaded.reviews as LoadedReview[];
     const maxReviews = options?.internal_max_reviews ?? options?.max_reviews ?? 300;
-    const sortedByRecency = [...allLoadedReviews].sort((a, b) => {
-        const aTs = a.review_created_at ? Date.parse(a.review_created_at) : Number.NaN;
-        const bTs = b.review_created_at ? Date.parse(b.review_created_at) : Number.NaN;
-        const aNum = Number.isFinite(aTs) ? aTs : 0;
-        const bNum = Number.isFinite(bTs) ? bTs : 0;
-        return bNum - aNum;
-    });
-    const rawInputReviews = sortedByRecency.slice(0, maxReviews);
+    const rawInputReviews = selectReviewsForAnalysis(allLoadedReviews, maxReviews);
 
     const startTime = Date.now();
     const circuitBreaker = new CircuitBreaker();
+    const counters = createAnalyzeCounters();
 
-    let filtered_spam = 0;
-    let llm_routed_count = 0;
-    let rule_only_count = 0;
-    let hybrid_count = 0;
-    let timeout_count = 0;
-    let rate_limit_count = 0;
-    let budget_guardrail_count = 0;
-
-    const models_used = resolveModelDefaults(options);
+    const models_used = deps.modelDefaults
+        ? resolveAnalyzeModelDefaults(options, deps.modelDefaults)
+        : resolveModelDefaults(options);
+    const promptContext = deps.promptContext ?? {};
+    const analysisCache = deps.analysisCache ?? new InMemoryAnalysisCache();
 
     const finalReviews = [];
     const safety_alerts = [];
     const processingLimit = pLimit(options?.concurrency ?? 15);
 
     const settledResults = await Promise.allSettled(
-        rawInputReviews.map((review) =>
-            processingLimit(() => processSingleReview(
+        rawInputReviews.map((review) => {
+            const cachedTask = analysisCache.getOrCreate(
                 review,
-                llmClient,
-                models_used.routing,
-                circuitBreaker,
-                budgetUsd,
-                options?.internal_rule_only ?? false
-            ))
-        )
+                () => processingLimit(() => processSingleReview(
+                    review,
+                    llmClient,
+                    models_used.routing,
+                    circuitBreaker,
+                    budgetUsd,
+                    options?.internal_rule_only ?? false,
+                    promptContext
+                ))
+            );
+            if (cachedTask.isDuplicate) {
+                counters.duplicate_review_groups++;
+            }
+            return cachedTask.promise;
+        })
     );
 
     const results = settledResults.map((settled, index) => {
@@ -135,15 +129,12 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     });
 
     for (const result of results) {
-        if (result.type === 'spam') {
-            filtered_spam++;
+        const processed = trackAnalyzeResult(result, counters);
+        if (!processed || result.type === 'spam') {
             continue;
         }
 
         let out = result.output;
-        if (result.fallback_reason === 'timeout') timeout_count++;
-        if (result.fallback_reason === 'rate_limited') rate_limit_count++;
-        if (result.fallback_reason === 'budget_guardrail') budget_guardrail_count++;
         try {
             finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
         } catch {
@@ -154,16 +145,6 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
             finalReviews.push(buildAnalyzedOutput(result.review, out, includeRawText));
         }
 
-        if (out.classification_source === 'hybrid') {
-            hybrid_count++;
-        } else {
-            rule_only_count++;
-        }
-
-        if (result.needsLlm && out.classification_source === 'hybrid') {
-            llm_routed_count++;
-        }
-
         if (out.severity === 'P0' || out.severity === 'P1') {
             safety_alerts.push(buildSafetyAlert(result.review, out, includeRawText));
         }
@@ -172,39 +153,25 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
     const total_processed = finalReviews.length;
     const total_reviews_input = rawInputReviews.length;
     const total_reviews_available = allLoadedReviews.length;
-    const spam_ratio = total_reviews_input > 0 ? filtered_spam / total_reviews_input : 0;
-    const llm_routed_ratio = total_processed > 0 ? llm_routed_count / total_processed : 0;
-    const rule_coverage_drop = total_processed > 0 && llm_routed_ratio > 0.4;
     const sampled = total_reviews_available > total_reviews_input;
 
     const cbState = circuitBreaker.getState();
+    const diagnostics = buildAnalyzeWarnings(total_processed, total_reviews_input, counters, cbState);
 
-    const warnings: string[] = [];
-    if (cbState.consecutiveFailures > 0) warnings.push('LLM Fallback Triggered');
-    if (spam_ratio > 0.2) warnings.push('Suspiciously high spam ratio detected.');
-    if (budget_guardrail_count > 0) warnings.push('Budget guardrail triggered; routed reviews fell back to rule engine.');
-    const degraded_reasons = [
-        ...(cbState.consecutiveFailures > 0 ? ['llm_fallback_triggered'] : []),
-        ...(timeout_count > 0 ? ['llm_timeout'] : []),
-        ...(rate_limit_count > 0 ? ['rate_limited'] : []),
-        ...(budget_guardrail_count > 0 ? ['budget_guardrail'] : [])
-    ];
-    const degraded_mode = degraded_reasons.length > 0;
-
-    if (rule_coverage_drop) {
+    if (diagnostics.ruleCoverageDrop) {
         logger.warn('analyze.rule_coverage_drop', {
-            llm_routed_ratio,
+            llm_routed_ratio: diagnostics.llmRoutedRatio,
             threshold: 0.4
         });
     }
 
     logger.info('analyze.batch_processed', {
         total_reviews_input,
-        filtered_spam,
-        llm_routed_count,
-        hybrid_count,
-        rule_only_count,
-        rules_fallback: warnings.includes('LLM Fallback Triggered')
+        filtered_spam: counters.filtered_spam,
+        llm_routed_count: counters.llm_routed_count,
+        hybrid_count: counters.hybrid_count,
+        rule_only_count: counters.rule_only_count,
+        rules_fallback: diagnostics.warnings.includes('LLM Fallback Triggered')
     });
 
     return {
@@ -220,22 +187,23 @@ export async function analyzeReviewsTool(input: unknown, deps: AnalyzeDeps) {
                 total_reviews_available,
                 sampled,
                 max_reviews: maxReviews,
-                filtered_spam,
-                spam_ratio,
+                duplicate_review_groups: counters.duplicate_review_groups,
+                filtered_spam: counters.filtered_spam,
+                spam_ratio: diagnostics.spamRatio,
                 total_processed,
-                llm_routed_count,
-                llm_routed_ratio,
-                rule_only_count,
-                hybrid_count,
-                rule_coverage_drop,
-                warnings,
-                degraded_mode,
-                degraded_reasons,
+                llm_routed_count: counters.llm_routed_count,
+                llm_routed_ratio: diagnostics.llmRoutedRatio,
+                rule_only_count: counters.rule_only_count,
+                hybrid_count: counters.hybrid_count,
+                rule_coverage_drop: diagnostics.ruleCoverageDrop,
+                warnings: diagnostics.warnings,
+                degraded_mode: diagnostics.degradedMode,
+                degraded_reasons: diagnostics.degradedReasons,
                 budget_usd: budgetUsd,
-                budget_guardrail_count,
-                rate_limit_count,
+                budget_guardrail_count: counters.budget_guardrail_count,
+                rate_limit_count: counters.rate_limit_count,
                 retry_count: cbState.totalFailures,
-                timeout_count,
+                timeout_count: counters.timeout_count,
                 cost_estimate_usd: cbState.estimatedCostUsd,
                 execution_time_ms: Date.now() - startTime
             },

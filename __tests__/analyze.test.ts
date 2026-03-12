@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { analyzeReviewsTool } from '../src/tools/analyze.js';
+import { loadReviews } from '../src/tools/import.js';
 
 vi.mock('../src/tools/import.js', () => ({
     loadReviews: vi.fn().mockResolvedValue({
@@ -10,12 +11,27 @@ vi.mock('../src/tools/import.js', () => ({
         diagnostics: {
             total_reviews_input: 2,
             filtered_spam: 0,
+            discarded_rows: 0,
             invalid_rows_dropped: 0,
             duplicates_dropped: 0,
             spam_ratio: 0
         }
     })
 }));
+vi.mock('../src/utils/config.js', async () => {
+    const actual = await vi.importActual('../src/utils/config.js');
+    return {
+        ...actual,
+        getConfig: vi.fn(() => ({
+            OPENAI_API_KEY: 'test-key',
+            OPENAI_ROUTING_MODEL: 'gpt-4o-mini',
+            OPENAI_SUMMARY_MODEL: 'gpt-4o',
+            SUPPORT_BRAND_NAME: 'ReviewRadar',
+            MAX_BATCH_BUDGET_USD: '5.00',
+            STORAGE_DIR: 'storage'
+        }))
+    };
+});
 
 describe('Analyze Tool', () => {
     it('accepts omitted source and uses default dataset resolution', async () => {
@@ -153,5 +169,96 @@ describe('Analyze Tool', () => {
         const result: any = await analyzeReviewsTool({ options: { max_reviews: 1 } }, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
         expect(result.data.metadata.total_reviews_input).toBe(1);
         expect(result.data.metadata.max_reviews).toBe(1);
+    });
+
+    it('reuses the same LLM classification for duplicate reviews in a batch', async () => {
+        vi.mocked(loadReviews).mockResolvedValueOnce({
+            reviews: [
+                { review_id: 'r1', content: 'Payment keeps failing on app version 1.2.3', score: 1 },
+                { review_id: 'r2', content: 'Payment keeps failing on app version 2.0.0', score: 1 }
+            ],
+            diagnostics: {
+                total_reviews_input: 2,
+                filtered_spam: 0,
+                discarded_rows: 0,
+                invalid_rows_dropped: 0,
+                duplicates_dropped: 0,
+                spam_ratio: 0
+            }
+        });
+        const input = {
+            source: {
+                type: "inline",
+                reviews: [
+                    { review_id: 'r1', content: 'Payment keeps failing on app version 1.2.3', score: 1 },
+                    { review_id: 'r2', content: 'Payment keeps failing on app version 2.0.0', score: 1 }
+                ]
+            },
+            options: { concurrency: 2 }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const mockLlmClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: '{"issue_type":"Payments / Transactions","feature_area":"Checkout","severity":"P1"}' }],
+                usage: { input_tokens: 10, output_tokens: 10 }
+            })
+        } as any;
+
+        const result: any = await analyzeReviewsTool(input, { vectorStore: mockVectorStore, llmClient: mockLlmClient });
+
+        expect(mockLlmClient.processPrompt).toHaveBeenCalledTimes(1);
+        expect(result.data.metadata.duplicate_review_groups).toBe(1);
+        expect(result.data.reviews).toHaveLength(2);
+    });
+
+    it('injects the support brand name into routed LLM prompts', async () => {
+        vi.mocked(loadReviews).mockResolvedValueOnce({
+            reviews: [
+                { review_id: 'r1', content: 'The app keeps crashing on launch', score: 1 }
+            ],
+            diagnostics: {
+                total_reviews_input: 1,
+                filtered_spam: 0,
+                discarded_rows: 0,
+                invalid_rows_dropped: 0,
+                duplicates_dropped: 0,
+                spam_ratio: 0
+            }
+        });
+        const input = {
+            source: { type: "inline", reviews: [{ review_id: 'r1', content: 'The app keeps crashing on launch', score: 1 }] },
+            options: { concurrency: 1 }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const mockLlmClient = {
+            processPrompt: vi.fn().mockResolvedValue({
+                content: [{ type: "text", text: '{"issue_type":"Bug","feature_area":"Crash Detection","severity":"P0"}' }],
+                usage: { input_tokens: 10, output_tokens: 10 }
+            })
+        } as any;
+
+        await analyzeReviewsTool(input, {
+            vectorStore: mockVectorStore,
+            llmClient: mockLlmClient,
+            promptContext: { supportBrandName: 'ReviewRadar' }
+        });
+
+        expect(mockLlmClient.processPrompt.mock.calls[0][0]).toContain('ReviewRadar');
     });
 });

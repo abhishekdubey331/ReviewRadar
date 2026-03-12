@@ -65,6 +65,8 @@ describe('importReviews', () => {
             expect(reviews[0].review_id).toBe('1');
             expect(reviews[0].score).toBe(5);
             expect(reviews[1].review_id).toBe('2');
+            expect(result.data.metadata.filtered_spam).toBe(0);
+            expect(result.data.metadata.discarded_rows).toBe(1);
             expect(result.data.metadata.duplicates_dropped).toBe(1);
             expect(result.data.metadata.invalid_rows_dropped).toBe(0);
         } finally {
@@ -86,6 +88,8 @@ describe('importReviews', () => {
             };
 
             const result = await importReviews(input, mockVectorStore);
+            expect(result.data.metadata.filtered_spam).toBe(0);
+            expect(result.data.metadata.discarded_rows).toBe(2);
             expect(result.data.metadata.duplicates_dropped).toBe(1);
             expect(result.data.metadata.invalid_rows_dropped).toBe(1);
         } finally {
