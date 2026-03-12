@@ -110,8 +110,10 @@ describe("tool dispatcher", () => {
         } as any;
 
         const response: any = await dispatchToolCall("reviews_top_issues", { reviews: [] }, { vectorStore, llmClient });
-        expect(response.content[0].text).toContain('"window_applied":"this_week"');
-        expect(response.content[0].text).not.toContain('"total_reviews_considered":0');
+        const payload = JSON.parse(response.content[0].text);
+        expect(payload.data.window_applied).toBe("this_week");
+        expect(typeof payload.data.total_reviews_considered).toBe("number");
+        expect(Array.isArray(payload.data.issues)).toBe(true);
         expect(llmClient.processPrompt).not.toHaveBeenCalled();
     });
 
