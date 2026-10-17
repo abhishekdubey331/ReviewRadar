@@ -53,8 +53,9 @@ describe('reviews.get_critical_alerts tool', () => {
         expect(review2Alert).toBeDefined();
         expect(review2Alert!.severity).toBe("P0");
         expect(review2Alert!.requires_immediate_attention).toBe(true);
-        expect(review2Alert!.text).toContain("[REDACTED]");
-        expect(review2Alert!.text).not.toContain("john@example.com");
+        expect(review2Alert!.snippet).toContain("[REDACTED]");
+        expect(review2Alert!.snippet).not.toContain("john@example.com");
+        expect(review2Alert!.text).toBeUndefined();
 
         const review3Alert = result.data.safety_alerts.find((a: any) => a.review_id === "3");
         expect(review3Alert).toBeDefined();
@@ -86,6 +87,7 @@ describe('reviews.get_critical_alerts tool', () => {
 
         const result = await getCriticalAlertsTool(input, mockVectorStore);
         expect(mockVectorStore.indexReviews).not.toHaveBeenCalled();
+        expect(result.data.safety_alerts[0].snippet).toContain("john@example.com");
         expect(result.data.safety_alerts[0].text).toContain("john@example.com");
     });
 
@@ -115,5 +117,27 @@ describe('reviews.get_critical_alerts tool', () => {
         expect(result.data.metadata.returned_alerts).toBe(1);
         expect(result.data.safety_alerts).toHaveLength(1);
     });
-});
 
+    it('truncates snippets for very long reviews in compact mode', async () => {
+        const input = {
+            source: {
+                type: 'inline',
+                reviews: [
+                    { review_id: "2", content: `${'A'.repeat(400)} scam`, score: 1 }
+                ]
+            }
+        };
+
+        const mockVectorStore = {
+            indexReviews: vi.fn(),
+            search: vi.fn(),
+            clear: vi.fn(),
+            getIndexStatus: vi.fn(),
+            getStorageDiagnostics: vi.fn()
+        } as any;
+
+        const result = await getCriticalAlertsTool(input, mockVectorStore);
+        expect(result.data.safety_alerts[0].snippet.length).toBeLessThanOrEqual(280);
+        expect(result.data.safety_alerts[0].snippet.endsWith('...')).toBe(true);
+    });
+});

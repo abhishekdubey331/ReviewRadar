@@ -6,6 +6,16 @@ import { createError } from '../utils/errors.js';
 import { IVectorStore } from '../domain/ports/vector_store.js';
 import { logger } from '../utils/logger.js';
 
+const DEFAULT_ALERT_SNIPPET_LENGTH = 280;
+
+function toAlertSnippet(text: string, maxLength: number = DEFAULT_ALERT_SNIPPET_LENGTH): string {
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    if (normalized.length <= maxLength) {
+        return normalized;
+    }
+    return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 export async function getCriticalAlertsTool(input: unknown, _vectorStore: IVectorStore) {
     const parseResult = AnalyzeToolInputSchema.safeParse(input);
     if (!parseResult.success) {
@@ -23,8 +33,9 @@ export async function getCriticalAlertsTool(input: unknown, _vectorStore: IVecto
 
     const safety_alerts: Array<{
         review_id: string;
-        text: string;
-        feature_area: string;
+        snippet: string;
+        text?: string;
+        feature_area?: string;
         severity: string;
         requires_immediate_attention: boolean;
     }> = [];
@@ -43,10 +54,12 @@ export async function getCriticalAlertsTool(input: unknown, _vectorStore: IVecto
 
         // Generic fast-path: include high-priority alerts regardless of app-specific taxonomy.
         if (out.severity === "P0" || out.severity === "P1") {
+            const alertText = includeRawText ? review.content : redacted;
             safety_alerts.push({
                 review_id: review.review_id,
-                text: includeRawText ? review.content : redacted,
-                feature_area: out.feature_area,
+                snippet: toAlertSnippet(alertText),
+                ...(includeRawText ? { text: review.content } : {}),
+                ...(out.feature_area !== "Unknown" ? { feature_area: out.feature_area } : {}),
                 severity: out.severity,
                 requires_immediate_attention: (out.severity === "P0")
             });
